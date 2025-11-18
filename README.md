@@ -1,3 +1,5 @@
+[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/atilaahmettaner-tradingview-mcp-badge.png)](https://mseep.ai/app/atilaahmettaner-tradingview-mcp)
+
 # 📈 TradingView MCP Server
 
 A powerful Model Context Protocol (MCP) server that provides advanced cryptocurrency and stock market analysis using TradingView data. Perfect for traders, analysts, and AI assistants who need real-time market intelligence.
