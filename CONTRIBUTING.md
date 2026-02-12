@@ -294,8 +294,11 @@ We follow [Semantic Versioning](https://semver.org/):
 2. Update CHANGELOG.md
 3. Run full test suite
 4. Create release tag
-5. Update documentation
-6. Announce in community channels
+5. Create GitHub release (triggers automatic publishing to GitHub Packages)
+6. Update documentation
+7. Announce in community channels
+
+**Note:** Publishing to GitHub Packages happens automatically via GitHub Actions when you create a GitHub release. Ensure the version in `pyproject.toml` is updated before creating the release, as GitHub Packages does not allow version overwrites.
 
 ## 🏆 Recognition
 
