@@ -20,8 +20,10 @@ where = ["src"]
 [tool.setuptools.package-data]
 tradingview_mcp = ["coinlist/*.txt"]
 
+[dependency-groups]
+dev = []
+
 [tool.uv]
-dev-dependencies = []
 package = true
 
 [build-system]

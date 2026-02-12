@@ -105,6 +105,44 @@ uv sync
 }
 ```
 
+### Option 3: Using uvx (Direct Package Execution)
+
+The package can also be run directly using `uvx` (similar to `npx` for Node.js):
+
+**Run from Git:**
+```bash
+# Run from a specific Git tag:
+uvx --from "git+https://github.com/baoduy/tradingview-mcp@v0.1.0" tradingview-mcp
+
+# Run from the latest main branch:
+uvx --from "git+https://github.com/baoduy/tradingview-mcp" tradingview-mcp
+```
+
+> **Note:** Once this package is published to PyPI, you'll also be able to run it directly with `uvx tradingview-mcp` without the `--from` flag.
+
+**Run locally for development/testing:**
+```bash
+# Clone and run directly from the repository:
+git clone https://github.com/baoduy/tradingview-mcp.git
+cd tradingview-mcp
+
+# Run the tool without installing:
+uvx --from . tradingview-mcp
+
+# Show help:
+uvx --from . tradingview-mcp --help
+```
+
+**Building the package:**
+```bash
+# Build wheel and source distribution:
+uv build
+
+# The built packages will be in the dist/ directory:
+# - tradingview_mcp-0.1.0-py3-none-any.whl
+# - tradingview_mcp-0.1.0.tar.gz
+```
+
 ## 🛠️ Available Tools
 
 ### 📈 Market Screening
@@ -240,7 +278,7 @@ Our proprietary rating system helps identify trading opportunities:
 ### Running in Development Mode:
 ```bash
 # Clone and setup
-git clone https://github.com/atilaahmettaner/tradingview-mcp.git
+git clone https://github.com/baoduy/tradingview-mcp.git
 cd tradingview-mcp
 uv sync
 
@@ -249,6 +287,12 @@ uv run mcp dev src/tradingview_mcp/server.py
 
 # Test individual functions
 uv run python test_api.py
+
+# Run directly with uvx (no installation needed)
+uvx --from . tradingview-mcp
+
+# Build the package
+uv build
 ```
 
 ### Adding New Exchanges:
