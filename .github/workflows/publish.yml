@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   build:
@@ -39,6 +40,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    environment: pypi
     if: github.event_name == 'push'
     steps:
       - name: Download dist artifacts
@@ -53,6 +55,5 @@ jobs:
       - name: Publish to GitHub Packages
         run: uv publish
         env:
-          UV_PUBLISH_URL: https://pypi.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/
           UV_PUBLISH_USERNAME: ${{ github.actor }}
           UV_PUBLISH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
