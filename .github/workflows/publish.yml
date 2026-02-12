@@ -15,22 +15,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
-
       - name: Build package
-        run: python -m build
+        run: uv build
 
       - name: Publish to GitHub Packages
         env:
-          TWINE_USERNAME: ${{ github.actor }}
-          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          twine upload --repository-url https://pypi.pkg.github.com/${{ github.repository_owner }}/ dist/*
+          UV_PUBLISH_USERNAME: ${{ github.actor }}
+          UV_PUBLISH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: uv publish --publish-url https://pypi.pkg.github.com/${{ github.repository_owner }}/
