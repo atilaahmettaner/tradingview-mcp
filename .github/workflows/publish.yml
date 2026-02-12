@@ -39,7 +39,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     steps:
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
