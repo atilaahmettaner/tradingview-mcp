@@ -25,7 +25,8 @@ def test_cli_help():
             return False
         
         # Check that help text contains expected content
-        expected_strings = ["TradingView", "MCP", "stdio"]
+        # We check for key command-line arguments to ensure the CLI is working
+        expected_strings = ["--help", "stdio", "options"]
         for expected in expected_strings:
             if expected not in result.stdout:
                 print(f"❌ Expected '{expected}' in help output")

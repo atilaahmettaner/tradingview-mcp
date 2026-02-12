@@ -109,17 +109,16 @@ uv sync
 
 The package can also be run directly using `uvx` (similar to `npx` for Node.js):
 
-**Run from PyPI or Git:**
+**Run from Git:**
 ```bash
-# Once published to PyPI, you can run directly:
-uvx tradingview-mcp
-
-# Or run from a specific Git tag:
+# Run from a specific Git tag:
 uvx --from "git+https://github.com/baoduy/tradingview-mcp@v0.1.0" tradingview-mcp
 
-# Or run from the latest main branch:
+# Run from the latest main branch:
 uvx --from "git+https://github.com/baoduy/tradingview-mcp" tradingview-mcp
 ```
+
+> **Note:** Once this package is published to PyPI, you'll also be able to run it directly with `uvx tradingview-mcp` without the `--from` flag.
 
 **Run locally for development/testing:**
 ```bash
