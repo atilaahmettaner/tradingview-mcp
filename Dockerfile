@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-dev
 COPY src/ ./src/
 
 # Install the package itself
-RUN uv pip install --no-deps -e .
+RUN uv pip install --no-deps -e . --python /app/.venv/bin/python
 
 ENV PYTHONPATH=src
 ENV HOST=0.0.0.0
@@ -23,4 +23,4 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-CMD ["uv", "run", "tradingview-mcp", "streamable-http"]
+CMD ["/app/.venv/bin/tradingview-mcp", "streamable-http"]
