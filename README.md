@@ -105,6 +105,33 @@ uv sync
 }
 ```
 
+### Option 3: One-Click Deploy to Render (No Terminal Needed)
+
+Deploy the MCP server to the cloud directly from your browser — no CLI, no terminal, works on iPhone.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hortonwill1-cloud/tradingview-mcp)
+
+**Steps:**
+1. Tap the button above → sign in with GitHub
+2. Render auto-detects the config from `render.yaml`
+3. Enter your `API_KEY` when prompted (generate one with any random string)
+4. Tap **"Apply"** — deployment starts automatically
+
+**After deploy**, use the server URL in your MCP client config:
+```json
+{
+  "mcpServers": {
+    "tradingview-mcp": {
+      "type": "streamable-http",
+      "url": "https://your-app-name.onrender.com/mcp",
+      "headers": { "Authorization": "Bearer your-api-key" }
+    }
+  }
+}
+```
+
+> **Note:** Render's free tier spins down after 15 minutes of inactivity (first request takes ~30s to wake up). Upgrade to a paid plan to keep it always-on.
+
 ## 🛠️ Available Tools
 
 ### 📈 Market Screening
