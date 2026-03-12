@@ -105,7 +105,50 @@ uv sync
 }
 ```
 
-### Option 3: One-Click Deploy to Render (No Terminal Needed)
+### Option 3: Connect to Deployed Cloud Server (Fastest)
+
+If the server is already deployed on Render, just add this to your Claude Desktop config — no installation needed.
+
+**Config file location:**
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Without API key:**
+```json
+{
+  "mcpServers": {
+    "tradingview-mcp": {
+      "type": "streamable-http",
+      "url": "https://tradingview-mcp-1gbt.onrender.com/mcp"
+    }
+  }
+}
+```
+
+**With API key (if you set one in Render):**
+```json
+{
+  "mcpServers": {
+    "tradingview-mcp": {
+      "type": "streamable-http",
+      "url": "https://tradingview-mcp-1gbt.onrender.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
+```
+
+Then **restart Claude Desktop** — the TradingView tools will appear automatically.
+
+> **Note:** Render's free tier sleeps after 15 min of inactivity. The first request after idle takes ~30s to wake up.
+
+> **Mobile (iPhone):** Claude's iOS app does not currently support MCP servers. This is a Claude Desktop feature only.
+
+---
+
+### Option 4: One-Click Deploy to Render (No Terminal Needed)
 
 Deploy the MCP server to the cloud directly from your browser — no CLI, no terminal, works on iPhone.
 
