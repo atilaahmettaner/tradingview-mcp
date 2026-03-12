@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tradingview-mcp
+    env: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: HOST
+        value: 0.0.0.0

@@ -105,6 +105,33 @@ uv sync
 }
 ```
 
+### Option 3: One-Click Deploy to Render (No Terminal Needed)
+
+Deploy the MCP server to the cloud directly from your browser — no CLI, no terminal, works on iPhone.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hortonwill1-cloud/tradingview-mcp)
+
+**Steps:**
+1. Tap the button above → sign in with GitHub
+2. Render auto-detects the config from `render.yaml`
+3. Enter your `API_KEY` when prompted (generate one with any random string)
+4. Tap **"Apply"** — deployment starts automatically
+
+**After deploy**, use the server URL in your MCP client config:
+```json
+{
+  "mcpServers": {
+    "tradingview-mcp": {
+      "type": "streamable-http",
+      "url": "https://your-app-name.onrender.com/mcp",
+      "headers": { "Authorization": "Bearer your-api-key" }
+    }
+  }
+}
+```
+
+> **Note:** Render's free tier spins down after 15 minutes of inactivity (first request takes ~30s to wake up). Upgrade to a paid plan to keep it always-on.
+
 ## 🛠️ Available Tools
 
 ### 📈 Market Screening
@@ -114,13 +141,19 @@ uv sync
 | `top_losers` | Find biggest declining assets | Worst performing stocks today |
 | `bollinger_scan` | Find assets with tight Bollinger Bands | Coins ready for breakout |
 | `rating_filter` | Filter by Bollinger Band rating | Strong buy signals (rating +2) |
+| `volume_breakout_scanner` | Detect volume + price breakouts | High-volume movers |
+| `smart_volume_scanner` | Volume + RSI combination scanner | Smart entry opportunities |
+| `rsi_scanner` | Scan for overbought/oversold conditions | Oversold coins on 1h |
+| `trend_scanner` | Find strongly trending assets via ADX | Bullish trending coins on 4h |
 
-### 🔍 Technical Analysis  
+### 🔍 Technical Analysis
 | Tool | Description | Example Usage |
 |------|-------------|---------------|
 | `coin_analysis` | Complete technical analysis | Analyze BTC with all indicators |
 | `consecutive_candles_scan` | Find candlestick patterns | 3+ consecutive green candles |
 | `advanced_candle_pattern` | Multi-timeframe pattern analysis | Complex pattern detection |
+| `multi_timeframe_summary` | Signal summary across 15m/1h/4h/1D | Quick BTC multi-TF overview |
+| `volume_confirmation_analysis` | Volume confirmation for a symbol | Confirm ETH breakout volume |
 
 ### 📋 Information
 | Tool | Description |
@@ -151,6 +184,21 @@ uv sync
 "Find coins with 3 consecutive bullish candles on Bybit"
 "Scan for stocks showing growing candle patterns"
 "Which assets have tight Bollinger Bands ready for breakout?"
+```
+
+**RSI & Trend Analysis:**
+```
+"Find oversold coins on KuCoin (1h timeframe)"
+"Show me overbought Binance coins on the daily chart"
+"Scan for strongly trending Bybit coins on 4h"
+"Find bullish-trending crypto with ADX above 40"
+```
+
+**Multi-Timeframe Overview:**
+```
+"Give me a multi-timeframe summary for BTCUSDT"
+"What do the 15m, 1h, 4h and daily signals say for ETH?"
+"Is SOLUSDT bullish or bearish across all timeframes?"
 ```
 
 **Advanced Queries:**
