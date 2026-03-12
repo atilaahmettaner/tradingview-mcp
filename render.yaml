@@ -3,7 +3,7 @@ services:
     name: tradingview-mcp
     env: docker
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /mcp
+    healthCheckPath: /health
     envVars:
       - key: API_KEY
         sync: false

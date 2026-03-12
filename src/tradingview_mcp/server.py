@@ -1114,17 +1114,29 @@ def main() -> None:
 		api_key = os.environ.get("API_KEY")
 		starlette_app = mcp.streamable_http_app()
 
+		from starlette.requests import Request
+		from starlette.routing import Route
+
+		async def health(request: Request) -> Response:
+			return Response("OK", status_code=200)
+
 		if api_key:
 			class ApiKeyMiddleware(BaseHTTPMiddleware):
 				async def dispatch(self, request, call_next):
+					if request.url.path == "/health":
+						return await call_next(request)
 					auth = request.headers.get("Authorization", "")
 					if auth != f"Bearer {api_key}":
 						return Response("Unauthorized", status_code=401)
 					return await call_next(request)
 
 			starlette_app = Starlette(
-				routes=[Mount("/", app=starlette_app)],
+				routes=[Route("/health", health), Mount("/", app=starlette_app)],
 				middleware=[Middleware(ApiKeyMiddleware)],
+			)
+		else:
+			starlette_app = Starlette(
+				routes=[Route("/health", health), Mount("/", app=starlette_app)],
 			)
 
 		async def _serve():
