@@ -215,3 +215,6 @@ __marimo__/
 test_nyse.py
 scripts/fetch_nyse_tickers.py
 .claude/
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/settings.json
