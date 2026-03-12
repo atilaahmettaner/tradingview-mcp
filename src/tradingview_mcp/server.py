@@ -1086,7 +1086,7 @@ def exchanges_list() -> str:
 def main() -> None:
 	parser = argparse.ArgumentParser(description="TradingView Screener MCP server")
 	parser.add_argument("transport", choices=["stdio", "streamable-http"], default="stdio", nargs="?", help="Transport (default stdio)")
-	parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+	parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
 	parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
 	args = parser.parse_args()
 
@@ -1097,12 +1097,47 @@ def main() -> None:
 	if args.transport == "stdio":
 		mcp.run()
 	else:
+		import anyio
+		import uvicorn
+		from starlette.applications import Starlette
+		from starlette.middleware import Middleware
+		from starlette.middleware.base import BaseHTTPMiddleware
+		from starlette.responses import Response
+		from starlette.routing import Mount
+
 		try:
 			mcp.settings.host = args.host
 			mcp.settings.port = args.port
 		except Exception:
 			pass
-		mcp.run(transport="streamable-http")
+
+		api_key = os.environ.get("API_KEY")
+		starlette_app = mcp.streamable_http_app()
+
+		if api_key:
+			class ApiKeyMiddleware(BaseHTTPMiddleware):
+				async def dispatch(self, request, call_next):
+					auth = request.headers.get("Authorization", "")
+					if auth != f"Bearer {api_key}":
+						return Response("Unauthorized", status_code=401)
+					return await call_next(request)
+
+			starlette_app = Starlette(
+				routes=[Mount("/", app=starlette_app)],
+				middleware=[Middleware(ApiKeyMiddleware)],
+			)
+
+		async def _serve():
+			config = uvicorn.Config(
+				starlette_app,
+				host=args.host,
+				port=args.port,
+				log_level="info",
+			)
+			server = uvicorn.Server(config)
+			await server.serve()
+
+		anyio.run(_serve)
 
 
 @mcp.tool()

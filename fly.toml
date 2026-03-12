@@ -1,0 +1,32 @@
+# fly.toml - Fly.io deployment config for TradingView MCP
+# Deploy with: fly launch --config fly.toml
+# Then set your secret: fly secrets set API_KEY=your-secret-key-here
+
+app = "tradingview-mcp"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  HOST = "0.0.0.0"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/mcp"
+    timeout = "5s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
