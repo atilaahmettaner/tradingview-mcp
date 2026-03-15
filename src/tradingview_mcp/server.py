@@ -265,6 +265,106 @@ def _fetch_multi_changes(exchange: str, timeframes: List[str] | None, base_timef
 	return out
 
 
+def _compact_scan_row(row: dict) -> dict:
+    """Reduce a scanner row to regime-critical signals only (strips raw prices, rounds floats).
+
+    Retained fields: symbol, chg% (change), rsi, bb_pos (above/within/below),
+    bbw (Bollinger Band Width), vol (raw volume int), plus any volume-specific
+    fields (volume_ratio, volume_strength, breakout_type, trading_recommendation).
+    """
+    ind = row.get("indicators", {}) or {}
+    close = ind.get("close")
+    bb_upper = ind.get("BB_upper")
+    bb_lower = ind.get("BB_lower")
+    sma20 = ind.get("SMA20")
+    rsi = ind.get("RSI")
+    volume = ind.get("volume")
+
+    bb_pos = None
+    if close is not None and bb_upper is not None and bb_lower is not None:
+        if close > bb_upper:
+            bb_pos = "above"
+        elif close < bb_lower:
+            bb_pos = "below"
+        else:
+            bb_pos = "within"
+
+    bbw = None
+    if sma20 and sma20 != 0 and bb_upper is not None and bb_lower is not None:
+        bbw = round((bb_upper - bb_lower) / sma20, 4)
+
+    out: dict = {"symbol": row.get("symbol")}
+    chg = row.get("changePercent")
+    if chg is not None:
+        out["chg%"] = round(chg, 2)
+    if rsi is not None:
+        out["rsi"] = round(rsi, 1)
+    if bb_pos is not None:
+        out["bb_pos"] = bb_pos
+    if bbw is not None:
+        out["bbw"] = bbw
+    if volume is not None:
+        out["vol"] = int(volume)
+    for key in ("volume_ratio", "volume_strength", "breakout_type", "trading_recommendation"):
+        if key in row:
+            out[key] = row[key]
+    return out
+
+
+def _compact_coin_analysis(result: dict) -> dict:
+    """Flatten coin_analysis result to regime-critical signals only."""
+    if "error" in result:
+        return result
+    pd_ = result.get("price_data", {})
+    ba = result.get("bollinger_analysis", {})
+    ti = result.get("technical_indicators", {})
+    ms = result.get("market_sentiment", {})
+    out: dict = {"symbol": result.get("symbol"), "tf": result.get("timeframe")}
+    if pd_.get("change_percent") is not None:
+        out["chg%"] = round(pd_["change_percent"], 2)
+    if ti.get("rsi") is not None:
+        out["rsi"] = round(ti["rsi"], 1)
+    if ti.get("rsi_signal"):
+        out["rsi_sig"] = ti["rsi_signal"]
+    if ba.get("position"):
+        out["bb_pos"] = ba["position"]
+    if ba.get("bbw") is not None:
+        out["bbw"] = round(ba["bbw"], 4)
+    if ba.get("signal"):
+        out["bb_sig"] = ba["signal"]
+    if ti.get("adx") is not None:
+        out["adx"] = round(ti["adx"], 1)
+    if ti.get("trend_strength"):
+        out["trend"] = ti["trend_strength"]
+    if ms.get("momentum"):
+        out["momentum"] = ms["momentum"]
+    return out
+
+
+def _compact_vol_confirmation(result: dict) -> dict:
+    """Flatten volume_confirmation_analysis to key signals only."""
+    if "error" in result:
+        return result
+    pd_ = result.get("price_data", {})
+    va = result.get("volume_analysis", {})
+    ti = result.get("technical_indicators", {})
+    out: dict = {"symbol": result.get("symbol")}
+    if pd_.get("change_percent") is not None:
+        out["chg%"] = pd_["change_percent"]
+    if va.get("volume_ratio") is not None:
+        out["vol_ratio"] = va["volume_ratio"]
+    if va.get("volume_strength"):
+        out["vol_str"] = va["volume_strength"]
+    if ti.get("RSI") is not None:
+        out["rsi"] = ti["RSI"]
+    if ti.get("BB_position"):
+        out["bb_pos"] = ti["BB_position"]
+    signals = result.get("signals", [])
+    if signals:
+        out["signals"] = signals
+    return out
+
+
 mcp = FastMCP(
 	name="TradingView Screener",
 	instructions=("Crypto screener utilities backed by TradingView Screener. Tools: top_gainers, top_losers, multi_changes."),
@@ -272,107 +372,118 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
+def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25, compact: bool = False) -> list[dict]:
     """Return top gainers for an exchange and timeframe using bollinger band analysis.
-    
+
     Args:
         exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         limit: Number of rows to return (max 50)
+        compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, bbw, vol) — ~70% fewer tokens.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
-    
+
     rows = _fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
-    # Convert Row objects to dicts properly
-    return [{
+    full = [{
         "symbol": row["symbol"],
-        "changePercent": row["changePercent"], 
+        "changePercent": row["changePercent"],
         "indicators": dict(row["indicators"])
     } for row in rows]
+    return [_compact_scan_row(r) for r in full] if compact else full
 
 
 @mcp.tool()
-def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
-    """Return top losers for an exchange and timeframe using bollinger band analysis."""
+def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25, compact: bool = False) -> list[dict]:
+    """Return top losers for an exchange and timeframe using bollinger band analysis.
+
+    Args:
+        exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        limit: Number of rows to return (max 50)
+        compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, bbw, vol) — ~70% fewer tokens.
+    """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
-    
+
     rows = _fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
-    # Reverse sort for losers (lowest change first)
     rows.sort(key=lambda x: x["changePercent"])
-    
-    # Convert to dict format
-    return [{
+
+    full = [{
         "symbol": row["symbol"],
         "changePercent": row["changePercent"],
         "indicators": dict(row["indicators"])
     } for row in rows[:limit]]
+    return [_compact_scan_row(r) for r in full] if compact else full
 
 
 @mcp.tool()
-def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshold: float = 0.04, limit: int = 50) -> list[dict]:
+def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshold: float = 0.04, limit: int = 50, compact: bool = False) -> list[dict]:
     """Scan for coins with low Bollinger Band Width (squeeze detection).
-    
+
     Args:
         exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
-        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M  
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         bbw_threshold: Maximum BBW value to filter (default 0.04)
         limit: Number of rows to return (max 100)
+        compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, bbw, vol) — ~70% fewer tokens.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "4h")
     limit = max(1, min(limit, 100))
-    
+
     rows = _fetch_bollinger_analysis(exchange, timeframe=timeframe, bbw_filter=bbw_threshold, limit=limit)
-    # Convert Row objects to dicts
-    return [{
+    full = [{
         "symbol": row["symbol"],
         "changePercent": row["changePercent"],
         "indicators": dict(row["indicators"])
     } for row in rows]
+    return [_compact_scan_row(r) for r in full] if compact else full
 
 
 @mcp.tool()
-def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int = 2, limit: int = 25) -> list[dict]:
+def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int = 2, limit: int = 25, compact: bool = False) -> list[dict]:
     """Filter coins by Bollinger Band rating.
-    
+
     Args:
         exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         rating: BB rating (-3 to +3): -3=Strong Sell, -2=Sell, -1=Weak Sell, 1=Weak Buy, 2=Buy, 3=Strong Buy
         limit: Number of rows to return (max 50)
+        compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, bbw, vol) — ~70% fewer tokens.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "5m")
     rating = max(-3, min(3, rating))
     limit = max(1, min(limit, 50))
-    
+
     rows = _fetch_trending_analysis(exchange, timeframe=timeframe, filter_type="rating", rating_filter=rating, limit=limit)
-    # Convert Row objects to dicts
-    return [{
+    full = [{
         "symbol": row["symbol"],
         "changePercent": row["changePercent"],
         "indicators": dict(row["indicators"])
     } for row in rows]
+    return [_compact_scan_row(r) for r in full] if compact else full
 
 @mcp.tool()
 def coin_analysis(
     symbol: str,
     exchange: str = "KUCOIN",
-    timeframe: str = "15m"
+    timeframe: str = "15m",
+    compact: bool = False
 ) -> dict:
     """Get detailed analysis for a specific coin on specified exchange and timeframe.
-    
+
     Args:
         symbol: Coin symbol (e.g., "ACEUSDT", "BTCUSDT")
-        exchange: Exchange name (BINANCE, KUCOIN, etc.) 
+        exchange: Exchange name (BINANCE, KUCOIN, etc.)
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W, 1M)
-    
+        compact: If True, flatten to regime-critical signals only (symbol, tf, chg%, rsi, bb_pos, bbw, adx, trend, momentum) — ~70% fewer tokens.
+
     Returns:
-        Detailed coin analysis with all indicators and metrics
+        Detailed coin analysis with all indicators and metrics (or compact summary)
     """
     try:
         exchange = sanitize_exchange(exchange, "KUCOIN")
@@ -430,7 +541,7 @@ def coin_analysis(
             open_price = indicators.get("open", 0)
             close_price = indicators.get("close", 0)
             
-            return {
+            result = {
                 "symbol": full_symbol,
                 "exchange": exchange,
                 "timeframe": timeframe,
@@ -451,8 +562,8 @@ def coin_analysis(
                     "bb_upper": round(indicators.get("BB.upper", 0), 6),
                     "bb_middle": round(indicators.get("SMA20", 0), 6),
                     "bb_lower": round(indicators.get("BB.lower", 0), 6),
-                    "position": "Above Upper" if close_price > indicators.get("BB.upper", 0) else 
-                               "Below Lower" if close_price < indicators.get("BB.lower", 0) else 
+                    "position": "Above Upper" if close_price > indicators.get("BB.upper", 0) else
+                               "Below Lower" if close_price < indicators.get("BB.lower", 0) else
                                "Within Bands"
                 },
                 "technical_indicators": {
@@ -477,7 +588,8 @@ def coin_analysis(
                     "momentum": "Bullish" if metrics['change'] > 0 else "Bearish"
                 }
             }
-            
+            return _compact_coin_analysis(result) if compact else result
+
         except Exception as e:
             return {
                 "error": f"Analysis failed: {str(e)}",
@@ -485,7 +597,7 @@ def coin_analysis(
                 "exchange": exchange,
                 "timeframe": timeframe
             }
-            
+
     except Exception as e:
         return {
             "error": f"Coin analysis failed: {str(e)}",
@@ -974,7 +1086,7 @@ def exchanges_list() -> str:
 def main() -> None:
 	parser = argparse.ArgumentParser(description="TradingView Screener MCP server")
 	parser.add_argument("transport", choices=["stdio", "streamable-http"], default="stdio", nargs="?", help="Transport (default stdio)")
-	parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+	parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
 	parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
 	args = parser.parse_args()
 
@@ -985,24 +1097,89 @@ def main() -> None:
 	if args.transport == "stdio":
 		mcp.run()
 	else:
+		import anyio
+		import uvicorn
+		from starlette.applications import Starlette
+		from starlette.middleware import Middleware
+		from starlette.middleware.base import BaseHTTPMiddleware
+		from starlette.responses import Response
+		from starlette.routing import Mount
+
 		try:
 			mcp.settings.host = args.host
 			mcp.settings.port = args.port
 		except Exception:
 			pass
-		mcp.run(transport="streamable-http")
+
+		api_key = os.environ.get("API_KEY")
+		starlette_app = mcp.streamable_http_app()
+
+		from starlette.requests import Request
+		from starlette.routing import Route
+
+		async def health(request: Request) -> Response:
+			return Response("OK", status_code=200)
+
+		if api_key:
+			class ApiKeyMiddleware(BaseHTTPMiddleware):
+				async def dispatch(self, request, call_next):
+					if request.url.path == "/health":
+						return await call_next(request)
+					auth = request.headers.get("Authorization", "")
+					if auth != f"Bearer {api_key}":
+						return Response("Unauthorized", status_code=401)
+					return await call_next(request)
+
+			starlette_app = Starlette(
+				routes=[Route("/health", health), Mount("/", app=starlette_app)],
+				middleware=[Middleware(ApiKeyMiddleware)],
+			)
+		else:
+			starlette_app = Starlette(
+				routes=[Route("/health", health), Mount("/", app=starlette_app)],
+			)
+
+		async def _keep_alive():
+			import httpx
+			# Prefer the public URL so Render registers real traffic and never sleeps.
+			# RENDER_EXTERNAL_URL is injected automatically by Render on all deployments.
+			public_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+			ping_url = f"{public_url}/health" if public_url else f"http://127.0.0.1:{args.port}/health"
+			await anyio.sleep(60)
+			while True:
+				try:
+					async with httpx.AsyncClient() as client:
+						await client.get(ping_url, timeout=10)
+				except Exception:
+					pass
+				await anyio.sleep(840)  # ping every 14 minutes to prevent Render sleep
+
+		async def _serve():
+			config = uvicorn.Config(
+				starlette_app,
+				host=args.host,
+				port=args.port,
+				log_level="info",
+			)
+			server = uvicorn.Server(config)
+			async with anyio.create_task_group() as tg:
+				tg.start_soon(server.serve)
+				tg.start_soon(_keep_alive)
+
+		anyio.run(_serve)
 
 
 @mcp.tool()
-def volume_breakout_scanner(exchange: str = "KUCOIN", timeframe: str = "15m", volume_multiplier: float = 2.0, price_change_min: float = 3.0, limit: int = 25) -> list[dict]:
+def volume_breakout_scanner(exchange: str = "KUCOIN", timeframe: str = "15m", volume_multiplier: float = 2.0, price_change_min: float = 3.0, limit: int = 25, compact: bool = False) -> list[dict]:
 	"""Detect coins with volume breakout + price breakout.
-	
+
 	Args:
 		exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
 		timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
 		volume_multiplier: How many times the volume should be above normal level (default 2.0)
 		price_change_min: Minimum price change percentage (default 3.0)
 		limit: Number of rows to return (max 50)
+		compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, vol_ratio, breakout_type) — ~70% fewer tokens.
 	"""
 	exchange = sanitize_exchange(exchange, "KUCOIN")
 	timeframe = sanitize_timeframe(timeframe, "15m")
@@ -1089,18 +1266,20 @@ def volume_breakout_scanner(exchange: str = "KUCOIN", timeframe: str = "15m", vo
 	
 	# Sort by volume strength first, then by price change
 	volume_breakouts.sort(key=lambda x: (x["volume_strength"], abs(x["changePercent"])), reverse=True)
-	
-	return volume_breakouts[:limit]
+
+	results = volume_breakouts[:limit]
+	return [_compact_scan_row(r) for r in results] if compact else results
 
 
 @mcp.tool()
-def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m") -> dict:
+def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m", compact: bool = False) -> dict:
 	"""Detailed volume confirmation analysis for a specific coin.
-	
+
 	Args:
 		symbol: Coin symbol (e.g., BTCUSDT)
 		exchange: Exchange name
 		timeframe: Time frame for analysis
+		compact: If True, flatten to key signals only (symbol, chg%, vol_ratio, vol_str, rsi, bb_pos, signals) — ~70% fewer tokens.
 	"""
 	exchange = sanitize_exchange(exchange, "KUCOIN")
 	timeframe = sanitize_timeframe(timeframe, "15m")
@@ -1182,7 +1361,7 @@ def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timefram
 		else:
 			volume_strength = "WEAK"
 		
-		return {
+		result = {
 			"symbol": symbol,
 			"price_data": {
 				"close": close,
@@ -1208,21 +1387,23 @@ def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timefram
 				"warning_signals": len([s for s in signals if "⚠️" in s])
 			}
 		}
-		
+		return _compact_vol_confirmation(result) if compact else result
+
 	except Exception as e:
 		return {"error": f"Analysis failed: {str(e)}"}
 
 
 @mcp.tool()
-def smart_volume_scanner(exchange: str = "KUCOIN", min_volume_ratio: float = 2.0, min_price_change: float = 2.0, rsi_range: str = "any", limit: int = 20) -> list[dict]:
+def smart_volume_scanner(exchange: str = "KUCOIN", min_volume_ratio: float = 2.0, min_price_change: float = 2.0, rsi_range: str = "any", limit: int = 20, compact: bool = False) -> list[dict]:
 	"""Smart volume + technical analysis combination scanner.
-	
+
 	Args:
 		exchange: Exchange name
 		min_volume_ratio: Minimum volume multiplier (default 2.0)
 		min_price_change: Minimum price change percentage (default 2.0)
 		rsi_range: "oversold" (<30), "overbought" (>70), "neutral" (30-70), "any"
 		limit: Number of results (max 30)
+		compact: If True, return only regime-critical fields (symbol, chg%, rsi, bb_pos, vol_ratio, breakout_type, trading_recommendation) — ~70% fewer tokens.
 	"""
 	exchange = sanitize_exchange(exchange, "KUCOIN")
 	min_volume_ratio = max(1.2, min(10.0, min_volume_ratio))
@@ -1268,8 +1449,279 @@ def smart_volume_scanner(exchange: str = "KUCOIN", min_volume_ratio: float = 2.0
 		
 		coin["trading_recommendation"] = recommendation
 		filtered_results.append(coin)
-	
-	return filtered_results[:limit]
+
+	results = filtered_results[:limit]
+	return [_compact_scan_row(r) for r in results] if compact else results
+
+
+@mcp.tool()
+def rsi_scanner(exchange: str = "KUCOIN", timeframe: str = "1h", condition: str = "oversold", rsi_threshold: float = None, limit: int = 20, compact: bool = False) -> list[dict]:
+    """Scan for coins matching a specific RSI condition.
+
+    Args:
+        exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        condition: "oversold" (RSI < 30), "overbought" (RSI > 70), or "custom" (use rsi_threshold)
+        rsi_threshold: Custom RSI threshold — used only when condition="custom". Acts as upper bound for oversold-style (RSI < threshold) or lower bound for overbought-style (RSI > threshold) based on threshold value (<50 = below, >=50 = above).
+        limit: Number of rows to return (max 50)
+        compact: If True, return only regime-critical fields — ~70% fewer tokens.
+    """
+    exchange = sanitize_exchange(exchange, "KUCOIN")
+    timeframe = sanitize_timeframe(timeframe, "1h")
+    limit = max(1, min(limit, 50))
+
+    if not TRADINGVIEW_TA_AVAILABLE:
+        return [{"error": "tradingview_ta is missing; run `uv sync`."}]
+
+    symbols = load_symbols(exchange)
+    if not symbols:
+        return [{"error": f"No symbols found for exchange: {exchange}"}]
+
+    screener = EXCHANGE_SCREENER.get(exchange, "crypto")
+    batch_size = 200
+    matched: list[dict] = []
+
+    for i in range(0, len(symbols), batch_size):
+        if len(matched) >= limit * 3:
+            break
+        batch = symbols[i:i + batch_size]
+        try:
+            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+        except Exception:
+            continue
+
+        for key, value in analysis.items():
+            try:
+                if value is None:
+                    continue
+                indicators = value.indicators
+                rsi = indicators.get("RSI")
+                if rsi is None:
+                    continue
+
+                # Apply condition filter
+                if condition == "oversold":
+                    if rsi >= 30:
+                        continue
+                elif condition == "overbought":
+                    if rsi <= 70:
+                        continue
+                elif condition == "custom" and rsi_threshold is not None:
+                    if rsi_threshold < 50:
+                        if rsi >= rsi_threshold:
+                            continue
+                    else:
+                        if rsi <= rsi_threshold:
+                            continue
+
+                metrics = compute_metrics(indicators)
+                if not metrics:
+                    continue
+
+                row = {
+                    "symbol": key,
+                    "changePercent": metrics["change"],
+                    "rsi": round(rsi, 2),
+                    "rsi_signal": "Oversold" if rsi < 30 else "Overbought" if rsi > 70 else "Neutral",
+                    "indicators": dict(IndicatorMap(
+                        open=metrics.get("open"),
+                        close=metrics.get("price"),
+                        SMA20=indicators.get("SMA20"),
+                        BB_upper=indicators.get("BB.upper"),
+                        BB_lower=indicators.get("BB.lower"),
+                        EMA50=indicators.get("EMA50"),
+                        RSI=rsi,
+                        volume=indicators.get("volume"),
+                    ))
+                }
+                matched.append(row)
+            except Exception:
+                continue
+
+    # Sort: oversold → ascending RSI (lowest first); overbought → descending RSI
+    if condition == "overbought":
+        matched.sort(key=lambda x: x["rsi"], reverse=True)
+    else:
+        matched.sort(key=lambda x: x["rsi"])
+
+    results = matched[:limit]
+    return [_compact_scan_row(r) for r in results] if compact else results
+
+
+@mcp.tool()
+def trend_scanner(exchange: str = "KUCOIN", timeframe: str = "4h", min_adx: float = 25.0, direction: str = "any", limit: int = 20, compact: bool = False) -> list[dict]:
+    """Scan for strongly trending coins using ADX (Average Directional Index).
+
+    Args:
+        exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        min_adx: Minimum ADX value to qualify as trending (default 25.0; >40 = very strong)
+        direction: Filter by trend direction — "bullish" (price above EMA50), "bearish" (price below EMA50), or "any"
+        limit: Number of rows to return (max 50)
+        compact: If True, return only regime-critical fields — ~70% fewer tokens.
+    """
+    exchange = sanitize_exchange(exchange, "KUCOIN")
+    timeframe = sanitize_timeframe(timeframe, "4h")
+    min_adx = max(10.0, min(60.0, min_adx))
+    limit = max(1, min(limit, 50))
+
+    if not TRADINGVIEW_TA_AVAILABLE:
+        return [{"error": "tradingview_ta is missing; run `uv sync`."}]
+
+    symbols = load_symbols(exchange)
+    if not symbols:
+        return [{"error": f"No symbols found for exchange: {exchange}"}]
+
+    screener = EXCHANGE_SCREENER.get(exchange, "crypto")
+    batch_size = 200
+    matched: list[dict] = []
+
+    for i in range(0, len(symbols), batch_size):
+        if len(matched) >= limit * 3:
+            break
+        batch = symbols[i:i + batch_size]
+        try:
+            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+        except Exception:
+            continue
+
+        for key, value in analysis.items():
+            try:
+                if value is None:
+                    continue
+                indicators = value.indicators
+                adx = indicators.get("ADX")
+                if adx is None or adx < min_adx:
+                    continue
+
+                close = indicators.get("close") or indicators.get("Candle.close")
+                ema50 = indicators.get("EMA50")
+                if close is None or ema50 is None:
+                    continue
+
+                trend_dir = "bullish" if close > ema50 else "bearish"
+                if direction != "any" and trend_dir != direction:
+                    continue
+
+                metrics = compute_metrics(indicators)
+                if not metrics:
+                    continue
+
+                row = {
+                    "symbol": key,
+                    "changePercent": metrics["change"],
+                    "adx": round(adx, 2),
+                    "trend_direction": trend_dir,
+                    "trend_strength": "Very Strong" if adx >= 40 else "Strong",
+                    "indicators": dict(IndicatorMap(
+                        open=metrics.get("open"),
+                        close=metrics.get("price"),
+                        SMA20=indicators.get("SMA20"),
+                        BB_upper=indicators.get("BB.upper"),
+                        BB_lower=indicators.get("BB.lower"),
+                        EMA50=ema50,
+                        RSI=indicators.get("RSI"),
+                        volume=indicators.get("volume"),
+                    ))
+                }
+                matched.append(row)
+            except Exception:
+                continue
+
+    matched.sort(key=lambda x: x["adx"], reverse=True)
+    results = matched[:limit]
+    return [_compact_scan_row(r) for r in results] if compact else results
+
+
+@mcp.tool()
+def multi_timeframe_summary(symbol: str, exchange: str = "KUCOIN", compact: bool = False) -> dict:
+    """Get a concise technical summary for a symbol across 4 timeframes (15m, 1h, 4h, 1D).
+
+    Useful for quickly gauging whether short-term and long-term signals agree or diverge.
+
+    Args:
+        symbol: Trading symbol (e.g., "BTCUSDT", "ETHUSDT", "AAPL")
+        exchange: Exchange name (KUCOIN, BINANCE, BYBIT, NASDAQ, etc.)
+        compact: If True, return a flat minimal dict per timeframe — ~70% fewer tokens.
+    """
+    if not TRADINGVIEW_TA_AVAILABLE:
+        return {"error": "tradingview_ta is missing; run `uv sync`."}
+
+    exchange = sanitize_exchange(exchange, "KUCOIN")
+    screener = EXCHANGE_SCREENER.get(exchange, "crypto")
+
+    if ":" not in symbol:
+        full_symbol = f"{exchange.upper()}:{symbol.upper()}"
+    else:
+        full_symbol = symbol.upper()
+
+    timeframes = ["15m", "1h", "4h", "1D"]
+    summary: dict = {"symbol": full_symbol, "exchange": exchange, "timeframes": {}}
+
+    for tf in timeframes:
+        try:
+            analysis = get_multiple_analysis(screener=screener, interval=tf, symbols=[full_symbol])
+            if full_symbol not in analysis or analysis[full_symbol] is None:
+                summary["timeframes"][tf] = {"error": "no data"}
+                continue
+
+            indicators = analysis[full_symbol].indicators
+            metrics = compute_metrics(indicators)
+            if not metrics:
+                summary["timeframes"][tf] = {"error": "metrics unavailable"}
+                continue
+
+            rsi = indicators.get("RSI", 0)
+            adx = indicators.get("ADX", 0)
+            macd = indicators.get("MACD.macd", 0)
+            macd_signal = indicators.get("MACD.signal", 0)
+            close = indicators.get("close") or metrics.get("price", 0)
+            ema50 = indicators.get("EMA50", 0)
+
+            tf_data = {
+                "change_percent": metrics["change"],
+                "rsi": round(rsi, 2),
+                "rsi_signal": "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral",
+                "bb_rating": metrics["rating"],
+                "bb_signal": metrics["signal"],
+                "bbw": metrics["bbw"],
+                "adx": round(adx, 2),
+                "trend_strength": "Strong" if adx > 25 else "Weak",
+                "trend_direction": "Bullish" if close > ema50 else "Bearish",
+                "macd_divergence": round(macd - macd_signal, 6),
+            }
+
+            if compact:
+                summary["timeframes"][tf] = {
+                    "chg%": tf_data["change_percent"],
+                    "rsi": tf_data["rsi"],
+                    "rsi_sig": tf_data["rsi_signal"],
+                    "bb": tf_data["bb_signal"],
+                    "adx": tf_data["adx"],
+                    "trend": tf_data["trend_direction"],
+                }
+            else:
+                summary["timeframes"][tf] = tf_data
+
+        except Exception as e:
+            summary["timeframes"][tf] = {"error": str(e)}
+
+    # Overall consensus
+    signals = [d.get("bb_signal", "") for d in summary["timeframes"].values() if isinstance(d, dict) and "bb_signal" in d]
+    bullish = sum(1 for s in signals if "Buy" in s)
+    bearish = sum(1 for s in signals if "Sell" in s)
+    if bullish > bearish:
+        consensus = "Bullish"
+    elif bearish > bullish:
+        consensus = "Bearish"
+    else:
+        consensus = "Mixed"
+
+    summary["consensus"] = consensus
+    summary["bullish_timeframes"] = bullish
+    summary["bearish_timeframes"] = bearish
+
+    return summary
 
 
 if __name__ == "__main__":
