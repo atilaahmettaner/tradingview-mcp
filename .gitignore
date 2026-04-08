@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .idea/
-.env# Byte-compiled / optimized / DLL files
+.env
 __pycache__/
 *.py[codz]
 *$py.class
@@ -215,3 +215,29 @@ __marimo__/
 test_nyse.py
 scripts/fetch_nyse_tickers.py
 .claude/
+
+# AI Agent skills — local only, never commit
+.agents/
+
+# Local test scripts
+test_api.py
+test_bitget.py
+test_refactor.py
+test_*.py
+!src/**/test_*.py
+
+# Internal strategy docs — not for public repo
+LAUNCH_STRATEGY.md
+RELEASE_NOTES_*.md
+
+# Scratch / temp files
+Untitled-*
+
+# npm config (this is a Python project)
+package.json
+package-lock.json
+node_modules/
+
+# Build artifacts that shouldn't be committed
+dist/
+*.egg-info/

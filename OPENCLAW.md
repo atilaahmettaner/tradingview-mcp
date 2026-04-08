@@ -64,23 +64,60 @@ curl -fsSL https://raw.githubusercontent.com/atilaahmettaner/tradingview-mcp/mai
 chmod +x ~/.openclaw/tools/trading.py
 ```
 
-### 4. Configure Your AI Model
+### 4. Configure Your AI Model (OpenRouter + Gemini 3 Flash)
 
-You can use Claude, Gemini, or DeepSeek. We recommend **OpenRouter** for the best tool calling at the lowest price (effectively free using Gemini Flash).
+We recommend **OpenRouter** — one API key gives you access to Gemini, Claude, DeepSeek and more. Gemini 3 Flash Preview is fast, smart, and has a generous free tier.
 
+**Step 4a — Get your OpenRouter API key:**
+1. Go to [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Sign in (or create a free account)
+3. Click **"Create Key"** → copy it
+
+**Step 4b — Set the model to Gemini 3 Flash Preview:**
 ```bash
-# Set gateway to local
-openclaw config set gateway.mode local
-
-# Ensure main agent is selected
-openclaw config set acp.defaultAgent main
-
-# Use Gemini 3 Flash via OpenRouter (or Claude directly)
-openclaw config set agents.defaults.model "openrouter/google/gemini-3-flash-preview"
-
-# Setup your OpenRouter API Key
-openclaw configure --section model
+python3 -c "
+import json
+with open('/root/.openclaw/openclaw.json', 'r') as f:
+    cfg = json.load(f)
+cfg['agents']['defaults']['model'] = 'openrouter/google/gemini-3-flash-preview'
+with open('/root/.openclaw/openclaw.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('✅ Model set to Gemini 3 Flash Preview via OpenRouter')
+"
 ```
+
+**Step 4c — Inject your OpenRouter API key** (replace `YOUR_KEY_HERE` with your actual key):
+```bash
+python3 -c "
+import json
+with open('/root/.openclaw/agents/main/agent/auth-profiles.json', 'r') as f:
+    cfg = json.load(f)
+cfg['profiles']['openrouter:default'] = {
+    'type': 'api_key',
+    'provider': 'openrouter',
+    'key': 'YOUR_KEY_HERE'
+}
+cfg['lastGood'] = {'openrouter': 'openrouter:default'}
+with open('/root/.openclaw/agents/main/agent/auth-profiles.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('✅ OpenRouter API key saved')
+"
+```
+
+**Step 4d — Also inject key into models.json** (required by some OpenClaw versions):
+```bash
+python3 -c "
+import json
+with open('/root/.openclaw/agents/main/agent/models.json', 'r') as f:
+    cfg = json.load(f)
+cfg['providers']['openrouter']['apiKey'] = 'YOUR_KEY_HERE'
+with open('/root/.openclaw/agents/main/agent/models.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('✅ API key also written to models.json')
+"
+```
+
+> **Note:** Replace `YOUR_KEY_HERE` with your actual OpenRouter key in both commands above.
 
 ### 5. Restart OpenClaw
 
@@ -166,7 +203,20 @@ openclaw doctor
 openclaw gateway restart
 ```
 
-**Yahoo Finance data fails**
+**`No API key found for provider "google"`**  
+This means OpenClaw was configured with `google/gemini-...` (direct Google API) but no Google key exists. Fix: use `openrouter/google/gemini-3-flash-preview` as the model ID (with OpenRouter key, not Google key). Re-run Step 4b and 4c above.
+
+**`404 No endpoints found for google/gemini-flash-1.5`**  
+This model ID is outdated on OpenRouter. Use `openrouter/google/gemini-3-flash-preview` instead:
+```bash
+python3 -c "import json; cfg=json.load(open('/root/.openclaw/openclaw.json')); cfg['agents']['defaults']['model']='openrouter/google/gemini-3-flash-preview'; json.dump(cfg, open('/root/.openclaw/openclaw.json','w'), indent=2); print('fixed')"
+systemctl --user restart openclaw-gateway.service
+```
+
+**`Reasoning is required for this model endpoint`**  
+OpenRouter's `auto` model sometimes picks a reasoning-only model. Fix by using Gemini 3 Flash explicitly (Step 4b above) instead of `auto`.
+
+**Yahoo Finance data fails**  
 The server uses a direct + proxy fallback. Without a proxy, some symbols may fail due to regional restrictions. Configure `PROXY_*` env vars in the MCP server config.
 
 ---
