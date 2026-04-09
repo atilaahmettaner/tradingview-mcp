@@ -1,7 +1,7 @@
-# 📈 AI Trading Intelligence Framework — MCP Server
+# ð AI Trading Intelligence Framework â MCP Server
 
 **The most complete AI-powered trading toolkit for Claude and MCP clients.**
-Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — all in one MCP server.
+Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools â all in one MCP server.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -9,54 +9,63 @@ Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — 
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-blueviolet)](https://openclaw.ai)
 [![Version](https://img.shields.io/badge/version-v0.7.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
 [![PyPI](https://img.shields.io/badge/PyPI-tradingview--mcp--server-orange)](https://pypi.org/project/tradingview-mcp-server/)
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤️-pink?logo=github-sponsors)](https://github.com/sponsors/atilaahmettaner)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-â¤ï¸-pink?logo=github-sponsors)](https://github.com/sponsors/atilaahmettaner)
 
-> **⭐ If this tool improves your workflow, please star the repo and consider [sponsoring](https://github.com/sponsors/atilaahmettaner) — it keeps the project alive and growing!**
+> **â­ If this tool improves your workflow, please star the repo and consider [sponsoring](https://github.com/sponsors/atilaahmettaner) â it keeps the project alive and growing!**
 
 <a href="https://github.com/sponsors/atilaahmettaner">
-  <img src="https://img.shields.io/badge/☕_Coffee_($5)-Sponsor-orange?style=for-the-badge&logo=github-sponsors" alt="Sponsor $5"/>
+  <img src="https://img.shields.io/badge/â_Coffee_($5)-Sponsor-orange?style=for-the-badge&logo=github-sponsors" alt="Sponsor $5"/>
 </a>
 <a href="https://github.com/sponsors/atilaahmettaner">
-  <img src="https://img.shields.io/badge/🚀_Supporter_($15)-Sponsor-blueviolet?style=for-the-badge&logo=github-sponsors" alt="Sponsor $15"/>
+  <img src="https://img.shields.io/badge/ð_Supporter_($15)-Sponsor-blueviolet?style=for-the-badge&logo=github-sponsors" alt="Sponsor $15"/>
 </a>
 <a href="https://github.com/sponsors/atilaahmettaner">
-  <img src="https://img.shields.io/badge/💎_Pro_($30)-Sponsor-gold?style=for-the-badge&logo=github-sponsors" alt="Sponsor $30"/>
+  <img src="https://img.shields.io/badge/ð_Pro_($30)-Sponsor-gold?style=for-the-badge&logo=github-sponsors" alt="Sponsor $30"/>
 </a>
 
 ---
 
-## 🎥 Framework Demo
+## ð¥ Framework Demo
 
 https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-4a605d98-43e8-49a6-8d3a-559315f6c01d.mp4
 
 ---
 
-## 🏗️ Architecture
+## ðï¸ Architecture
 
 ![tradingview-mcp Architecture](assets/architecture.png)
 
 ---
 
-## ✨ Why tradingview-mcp?
+## â¨ Why tradingview-mcp?
 
 | Feature | `tradingview-mcp` | Traditional Setups | Bloomberg Terminal |
 |---------|-------------------|--------------------|--------------------|
 | **Setup Time** | 5 minutes | Hours (Docker, Conda...) | Weeks (Contracts) |
 | **Cost** | Free & Open Source | Variable | $30k+/year |
-| **Backtesting** | ✅ 6 strategies + Sharpe | ❌ Manual scripting | ✅ Proprietary |
-| **Live Sentiment** | ✅ Reddit + RSS news | ❌ Separate setup | ✅ Terminal |
-| **Market Data** | ✅ Live / Real-Time | Historical / Delayed | Live |
+| **Backtesting** | â 6 strategies + Sharpe | â Manual scripting | â Proprietary |
+| **Live Sentiment** | â Reddit + RSS news | â Separate setup | â Terminal |
+| **Market Data** | â Live / Real-Time | Historical / Delayed | Live |
 | **API Keys** | **None required** | Multiple (OpenAI, etc.) | N/A |
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+## ð Quick Start (5 Minutes)
 
 ### Install via pip
 ```bash
 pip install tradingview-mcp-server
 ```
 
+### Cross-host install via agent-add
+
+Auto-configure any supported AI client (Claude Desktop, Cursor, Windsurf, and [15+ more](https://github.com/pea3nut/agent-get)) with one command:
+
+```bash
+npx -y agent-add --mcp '{"tradingview":{"command":"uvx","args":["--from","tradingview-mcp-server","tradingview-mcp"]}}'
+```
+
+> Requires [Node.js](https://nodejs.org/) 18+ and [uv](https://docs.astral.sh/uv/). `agent-add` auto-detects your AI client and writes the correct config file.
 ### Claude Desktop Config (`claude_desktop_config.json`)
 
 > **Note:** On macOS, GUI apps like Claude Desktop may not have `~/.local/bin` in their PATH. Use the full path to `uvx` to avoid "command not found" errors.
@@ -83,16 +92,16 @@ uv run tradingview-mcp
 
 ---
 
-## 📱 Use via Telegram, WhatsApp & More (OpenClaw)
+## ð± Use via Telegram, WhatsApp & More (OpenClaw)
 
-Connect this server to **Telegram, WhatsApp, Discord** and 20+ messaging platforms using [OpenClaw](https://openclaw.ai) — a self-hosted AI gateway. **Tested & verified on Hetzner VPS (Ubuntu 24.04).**
+Connect this server to **Telegram, WhatsApp, Discord** and 20+ messaging platforms using [OpenClaw](https://openclaw.ai) â a self-hosted AI gateway. **Tested & verified on Hetzner VPS (Ubuntu 24.04).**
 
 ### How It Works
 
-> OpenClaw routes Telegram messages to an AI agent. The agent uses `trading.py` — a thin Python wrapper — to call `tradingview-mcp` functions and return formatted results. **No MCP protocol needed between OpenClaw and the server; it's a direct Python import.**
+> OpenClaw routes Telegram messages to an AI agent. The agent uses `trading.py` â a thin Python wrapper â to call `tradingview-mcp` functions and return formatted results. **No MCP protocol needed between OpenClaw and the server; it's a direct Python import.**
 
 ```
-Telegram → OpenClaw agent (AI model) → trading.py (bash) → tradingview-mcp → Yahoo Finance
+Telegram â OpenClaw agent (AI model) â trading.py (bash) â tradingview-mcp â Yahoo Finance
 ```
 
 ### Quick Setup
@@ -134,25 +143,25 @@ systemctl --user start openclaw-gateway.service
 
 ### Choose Your AI Model
 
-OpenRouter is **not required** — use whichever provider you have a key for:
+OpenRouter is **not required** â use whichever provider you have a key for:
 
 | Provider | Model ID for OpenClaw | Get Key |
 |----------|----------------------|---------|
-| **OpenRouter** (aggregator — access to all models) | `openrouter/google/gemini-3-flash-preview` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| **OpenRouter** (aggregator â access to all models) | `openrouter/google/gemini-3-flash-preview` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | **Anthropic** (Claude direct) | `anthropic/claude-sonnet-4-5` | [console.anthropic.com](https://console.anthropic.com) |
 | **Google** (Gemini direct) | `google/gemini-2.5-flash` | [aistudio.google.com](https://aistudio.google.com) |
 | **OpenAI** (GPT direct) | `openai/gpt-4o-mini` | [platform.openai.com](https://platform.openai.com) |
 
 ```bash
-# Examples — set your chosen model:
+# Examples â set your chosen model:
 openclaw config set agents.defaults.model "openrouter/google/gemini-3-flash-preview"  # via OpenRouter
 openclaw config set agents.defaults.model "anthropic/claude-sonnet-4-5"               # Anthropic direct
 openclaw config set agents.defaults.model "google/gemini-2.5-flash"                   # Google direct
 ```
 
-> ⚠️ **Important:** Prefix must match your provider. `google/...` needs a Google API key. `openrouter/...` needs an OpenRouter key.
+> â ï¸ **Important:** Prefix must match your provider. `google/...` needs a Google API key. `openrouter/...` needs an OpenRouter key.
 
-### ⚠️ Common Mistakes
+### â ï¸ Common Mistakes
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
@@ -170,7 +179,7 @@ backtest RSI strategy for AAPL, 1 year
 compare all strategies for BTC-USD
 ```
 
-👉 **[Full OpenClaw Setup Guide →](OPENCLAW.md)**
+ð **[Full OpenClaw Setup Guide â](OPENCLAW.md)**
 
 ---
 
@@ -180,17 +189,17 @@ compare all strategies for BTC-USD
 
 Unlike basic screeners, this framework deploys **specialized AI agents** that debate findings in real-time:
 
-1. **🛠️ Technical Analyst** — Bollinger Bands (±3 proprietary rating), RSI, MACD
-2. **🌊 Sentiment & Momentum Analyst** — Reddit community sentiment + price momentum
-3. **🛡️ Risk Manager** — Volatility, drawdown risk, mean-reversion signals
+1. **ð ï¸ Technical Analyst** â Bollinger Bands (Â±3 proprietary rating), RSI, MACD
+2. **ð Sentiment & Momentum Analyst** â Reddit community sentiment + price momentum
+3. **ð¡ï¸ Risk Manager** â Volatility, drawdown risk, mean-reversion signals
 
 *Output: `STRONG BUY` / `BUY` / `HOLD` / `SELL` / `STRONG SELL` with confidence score*
 
 ---
 
-## 🔧 All 30+ MCP Tools
+## ð§ All 30+ MCP Tools
 
-### 📊 Backtesting Engine *(New in v0.6.0)*
+### ð Backtesting Engine *(New in v0.6.0)*
 
 | Tool | Description |
 |------|-------------|
@@ -198,25 +207,25 @@ Unlike basic screeners, this framework deploys **specialized AI agents** that de
 | `compare_strategies` | Run all 6 strategies on same symbol and rank by performance |
 
 **6 Strategies to Test:**
-- `rsi` — RSI oversold/overbought mean reversion
-- `bollinger` — Bollinger Band mean reversion
-- `macd` — MACD golden/death cross
-- `ema_cross` — EMA 20/50 Golden/Death Cross
-- `supertrend` — ATR-based Supertrend trend following 🔥
-- `donchian` — Donchian Channel breakout (Turtle Trader style)
+- `rsi` â RSI oversold/overbought mean reversion
+- `bollinger` â Bollinger Band mean reversion
+- `macd` â MACD golden/death cross
+- `ema_cross` â EMA 20/50 Golden/Death Cross
+- `supertrend` â ATR-based Supertrend trend following ð¥
+- `donchian` â Donchian Channel breakout (Turtle Trader style)
 
 **Metrics you get:** Win Rate, Total Return, Sharpe Ratio, Calmar Ratio, Max Drawdown, Profit Factor, Expectancy, Best/Worst Trade, vs Buy-and-Hold, with **realistic commission + slippage simulation**.
 
 ```
 Example prompt: "Compare all strategies on BTC-USD for 2 years"
-→ #1 Supertrend: +31.5% | Sharpe: 2.1 | WR: 62%
-→ #2 Bollinger:  +18.3% | Sharpe: 3.4 | WR: 75%
-→ Buy & Hold:    -5.0%
+â #1 Supertrend: +31.5% | Sharpe: 2.1 | WR: 62%
+â #2 Bollinger:  +18.3% | Sharpe: 3.4 | WR: 75%
+â Buy & Hold:    -5.0%
 ```
 
 ---
 
-### 💰 Yahoo Finance — Real-Time Prices *(New in v0.6.0)*
+### ð° Yahoo Finance â Real-Time Prices *(New in v0.6.0)*
 
 | Tool | Description |
 |------|-------------|
@@ -227,32 +236,32 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 
 ---
 
-### 🧠 AI Sentiment & Intelligence *(New in v0.5.0)*
+### ð§  AI Sentiment & Intelligence *(New in v0.5.0)*
 
 | Tool | Description |
 |------|-------------|
 | `market_sentiment` | Reddit sentiment across finance communities (bullish/bearish score, top posts) |
 | `financial_news` | Live RSS headlines from Reuters, CoinDesk, CoinTelegraph |
-| `combined_analysis` | **Power Tool**: TradingView technicals + Reddit sentiment + live news → confluence decision |
+| `combined_analysis` | **Power Tool**: TradingView technicals + Reddit sentiment + live news â confluence decision |
 
 ---
 
-### 📈 Technical Analysis Core
+### ð Technical Analysis Core
 
 | Tool | Description |
 |------|-------------|
 | `get_technical_analysis` | Full TA: RSI, MACD, Bollinger, 23 indicators with BUY/SELL/HOLD |
 | `get_multiple_analysis` | Bulk TA for multiple symbols at once |
-| `get_bollinger_band_analysis` | Proprietary ±3 BB rating system |
+| `get_bollinger_band_analysis` | Proprietary Â±3 BB rating system |
 | `get_stock_decision` | 3-layer decision engine (ranking + trade setup + quality score) |
 | `screen_stocks` | Multi-exchange screener with 20+ filter criteria |
 | `scan_by_signal` | Scan by signal type (oversold, trending, breakout...) |
 | `get_candlestick_patterns` | 15 candlestick pattern detector |
-| `get_multi_timeframe_analysis` | Weekly→Daily→4H→1H→15m alignment analysis |
+| `get_multi_timeframe_analysis` | WeeklyâDailyâ4Hâ1Hâ15m alignment analysis |
 
 ---
 
-### 🌍 Multi-Exchange Support
+### ð Multi-Exchange Support
 
 | Exchange | Tools |
 |----------|-------|
@@ -264,36 +273,36 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 
 ---
 
-## 💬 Example AI Conversations
+## ð¬ Example AI Conversations
 
 ```
 You: "Give me a full market snapshot right now"
-AI: [market_snapshot] → S&P500 -3.4%, BTC +0.1%, VIX 31 (+13%), EUR/USD 1.15
+AI: [market_snapshot] â S&P500 -3.4%, BTC +0.1%, VIX 31 (+13%), EUR/USD 1.15
 
 You: "What is Reddit saying about NVDA?"
-AI: [market_sentiment] → Strongly Bullish (0.41) | 23 posts | 18 bullish
+AI: [market_sentiment] â Strongly Bullish (0.41) | 23 posts | 18 bullish
 
 You: "Backtest RSI strategy on BTC-USD for 2 years"
-AI: [backtest_strategy] → +31.5% return | 100% win rate | 2 trades | B&H: -5%
+AI: [backtest_strategy] â +31.5% return | 100% win rate | 2 trades | B&H: -5%
 
 You: "Which strategy worked best on AAPL in the last 2 years?"
-AI: [compare_strategies] → Supertrend #1 (+14.6%, Sharpe 3.09), MACD last (-9.1%)
+AI: [compare_strategies] â Supertrend #1 (+14.6%, Sharpe 3.09), MACD last (-9.1%)
 
 You: "Analyze TSLA with all signals: technical + sentiment + news"
-AI: [combined_analysis] → BUY (Technical STRONG BUY + Bullish Reddit + Positive news)
+AI: [combined_analysis] â BUY (Technical STRONG BUY + Bullish Reddit + Positive news)
 ```
 
 ---
 
-## 💖 Support the Project
+## ð Support the Project
 
 This framework is **free and open source**, built in spare time. If it saves you hours of research or helps you make better decisions, please consider sponsoring:
 
 | Tier | Monthly | What You Get |
 |------|---------|--------------|
-| ☕ Coffee | $5 | Heartfelt gratitude + name in README |
-| 🚀 Supporter | $15 | Above + priority bug fixes |
-| 💎 Pro | $30 | Above + priority feature requests |
+| â Coffee | $5 | Heartfelt gratitude + name in README |
+| ð Supporter | $15 | Above + priority bug fixes |
+| ð Pro | $30 | Above + priority feature requests |
 
 <a href="https://github.com/sponsors/atilaahmettaner">
   <img src="https://img.shields.io/badge/Become_a_Sponsor-pink?style=for-the-badge&logo=github-sponsors" alt="Sponsor"/>
@@ -303,7 +312,7 @@ Every sponsor directly funds new features like Walk-Forward Backtesting, Twitter
 
 ---
 
-## 📋 Roadmap
+## ð Roadmap
 
 - [x] TradingView technical analysis (30+ indicators)
 - [x] Multi-exchange screener (Binance, KuCoin, EGX, US stocks)
@@ -318,9 +327,9 @@ Every sponsor directly funds new features like Walk-Forward Backtesting, Twitter
 
 ---
 
-## 📄 License
+## ð License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License â see [LICENSE](LICENSE) for details.
 
 ---
 
