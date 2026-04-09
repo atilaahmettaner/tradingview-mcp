@@ -68,6 +68,7 @@ def tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
     return {
         "5m": "5",
         "15m": "15",
+        "30m": "30",
         "1h": "60",
         "4h": "240",
         "1D": "1D",

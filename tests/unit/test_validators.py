@@ -16,6 +16,7 @@ def test_sanitize_timeframe_accepts_uppercase_with_whitespace():
 def test_sanitize_timeframe_preserves_intraday_timeframes():
     assert sanitize_timeframe("5m") == "5m"
     assert sanitize_timeframe("15m") == "15m"
+    assert sanitize_timeframe("30m") == "30m"
     assert sanitize_timeframe("1h") == "1h"
     assert sanitize_timeframe("4h") == "4h"
 

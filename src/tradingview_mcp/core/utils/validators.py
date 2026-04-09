@@ -2,10 +2,11 @@ from __future__ import annotations
 import os
 from typing import Set
 
-ALLOWED_TIMEFRAMES: Set[str] = {"5m", "15m", "1h", "4h", "1D", "1W", "1M"}
+ALLOWED_TIMEFRAMES: Set[str] = {"5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"}
 _TIMEFRAME_ALIASES = {
     "5m": "5m",
     "15m": "15m",
+    "30m": "30m",
     "1h": "1h",
     "4h": "4h",
     "1d": "1D",

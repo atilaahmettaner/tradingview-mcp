@@ -358,8 +358,7 @@ def fetch_multi_timeframe_patterns(
     if not _SCREENER_AVAILABLE:
         return []
     try:
-        tf_map = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1D": "1D"}
-        tv_interval = tf_map.get(base_tf, "15")
+        tv_interval = tf_to_tv_resolution(base_tf) or "15"
 
         cols = [
             f"open|{tv_interval}",
