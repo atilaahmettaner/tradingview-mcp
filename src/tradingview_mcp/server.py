@@ -71,7 +71,7 @@ mcp = FastMCP(
     instructions=(
         "Multi-market screener backed by TradingView. "
         "Supports crypto exchanges (KuCoin, Binance, Bybit, etc.) and stock markets "
-        "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX). "
+        "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX, SSE, SZSE). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
     ),
@@ -85,7 +85,7 @@ def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 2
     """Return top gainers for an exchange and timeframe using Bollinger Band analysis.
 
     Args:
-        exchange: Exchange name — crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
+        exchange: Exchange name — crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         limit: Number of rows to return (max 50)
     """
@@ -112,7 +112,7 @@ def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshol
     """Scan for assets with low Bollinger Band Width (squeeze detection). Works with crypto and stocks.
 
     Args:
-        exchange: Exchange — crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
+        exchange: Exchange — crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         bbw_threshold: Maximum BBW value to filter (default 0.04)
         limit: Number of rows to return (max 100)
@@ -149,8 +149,8 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
     """Get detailed analysis for a specific asset (coin or stock) on specified exchange and timeframe.
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST)
-        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
+        symbol: Symbol — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE)
+        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W, 1M)
 
     Returns:
@@ -308,8 +308,8 @@ def multi_agent_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str =
     """Run a multi-agent debate (Technical, Sentiment, Risk) for a specific symbol.
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST)
-        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE
+        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE)
+        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE, SSE, SZSE
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W)
 
     Returns:
@@ -441,8 +441,8 @@ def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dict:
     """Multi-timeframe alignment analysis (Weekly → Daily → 4H → 1H → 15m).
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST)
-        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE
+        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE)
+        exchange: Exchange — crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE, SSE, SZSE
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     full_symbol = symbol.upper() if ":" in symbol else f"{exchange.upper()}:{symbol.upper()}"
