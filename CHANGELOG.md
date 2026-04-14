@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-04-14
+
+### Added
+- **MEXC Exchange Support** (`exchange="MEXC"`):
+  - 420 MEXC trading pairs added — including many unique pairs not available on Binance, KuCoin, or Bybit
+  - Fully supported in all tools: `top_gainers`, `top_losers`, `bollinger_scan`, `coin_analysis`, `multi_agent_analysis`, `volume_breakout_scanner`, `consecutive_candles_scan`, `advanced_candle_pattern`, and more
+  - MEXC correctly categorized as a crypto screener market
+
+---
+
 ## [0.7.0] - 2026-03-29
 
 ### Added
