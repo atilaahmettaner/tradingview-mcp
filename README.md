@@ -85,6 +85,49 @@ uv run tradingview-mcp
 
 ---
 
+## 🛠️ Troubleshooting
+
+### 🪟 Windows: `MCP error -32001: Request timed out` on first launch
+
+Symptom — you see this in the Claude Desktop logs shortly after adding the config:
+
+```
+[tradingview] Server started and connected successfully
+[tradingview] Message from client: initialize ...
+[60 seconds later]
+[tradingview] notifications/cancelled — reason: "MCP error -32001: Request timed out"
+```
+
+**Why it happens:** on Windows with Python 3.14, `uvx` downloads `tradingview-mcp-server`, creates a fresh virtualenv, and installs dependencies the first time it runs. Because `pandas` has no prebuilt wheel for Python 3.14 yet, pip falls back to a source build — which typically exceeds Claude Desktop's 60-second MCP initialization timeout.
+
+**Fix — pin to Python 3.13 (has prebuilt pandas wheels):**
+
+```json
+{
+  "mcpServers": {
+    "tradingview": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "--from", "tradingview-mcp-server", "tradingview-mcp"]
+    }
+  }
+}
+```
+
+On macOS use the full path to `uvx` (see the note in Quick Start). On Windows `uvx` is typically `%USERPROFILE%\.local\bin\uvx.exe`.
+
+**Alternative — pre-install once, then let Claude Desktop reuse the cache:**
+
+```bash
+# Run in a terminal before launching Claude Desktop
+uv tool install --python 3.13 tradingview-mcp-server
+```
+
+After the install finishes, start Claude Desktop with the normal config and the server will come up instantly (cache is already warm).
+
+> _Credit: [@wyh4444](https://github.com/wyh4444) for the original report in [#24](https://github.com/atilaahmettaner/tradingview-mcp/issues/24)._
+
+---
+
 ## 📱 Use via Telegram, WhatsApp & More (OpenClaw)
 
 Connect this server to **Telegram, WhatsApp, Discord** and 20+ messaging platforms using [OpenClaw](https://openclaw.ai) — a self-hosted AI gateway. **Tested & verified on Hetzner VPS (Ubuntu 24.04).**
