@@ -31,7 +31,9 @@ where = ["src"]
 tradingview_mcp = ["coinlist/*.txt"]
 
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = [
+    "pytest>=9.0.3",
+]
 package = true
 
 [build-system]

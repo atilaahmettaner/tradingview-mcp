@@ -14,7 +14,7 @@ from tradingview_mcp.core.types import (
 )
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
-from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type
+from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type, get_tv_exchange_prefix
 
 try:
     from tradingview_ta import get_multiple_analysis
@@ -447,7 +447,7 @@ def analyze_coin(
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
-    full_symbol = symbol.upper() if ":" in symbol else f"{exchange.upper()}:{symbol.upper()}"
+    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
 
     try:
