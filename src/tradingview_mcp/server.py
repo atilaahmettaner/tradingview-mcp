@@ -55,6 +55,7 @@ from tradingview_mcp.core.services.backtest_service import (
 from tradingview_mcp.core.utils.validators import (
     sanitize_timeframe,
     sanitize_exchange,
+    get_tv_exchange_prefix,
 )
 
 try:
@@ -308,8 +309,8 @@ def multi_agent_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str =
     """Run a multi-agent debate (Technical, Sentiment, Risk) for a specific symbol.
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
-        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, SSE, SZSE, TWSE, TPEX
+        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX), "GDX" (AMEX)
+        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W)
 
     Returns:
@@ -317,7 +318,7 @@ def multi_agent_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str =
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
-    full_symbol = symbol.upper() if ":" in symbol else f"{exchange.upper()}:{symbol.upper()}"
+    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
     return run_multi_agent_analysis(full_symbol, exchange, timeframe)
 
 
@@ -441,11 +442,11 @@ def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dict:
     """Multi-timeframe alignment analysis (Weekly → Daily → 4H → 1H → 15m).
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
-        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, SSE, SZSE, TWSE, TPEX
+        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX), "GDX" (AMEX)
+        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
-    full_symbol = symbol.upper() if ":" in symbol else f"{exchange.upper()}:{symbol.upper()}"
+    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
     return run_multi_timeframe_analysis(full_symbol, exchange)
 
 
@@ -480,8 +481,8 @@ def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: str = "1
     """POWER TOOL: TradingView technical analysis + Reddit sentiment + Financial news.
 
     Args:
-        symbol: Asset symbol ("AAPL", "BTCUSDT", "THYAO")
-        exchange: Exchange (NASDAQ, NYSE, BINANCE, KUCOIN, MEXC, BIST, EGX)
+        symbol: Asset symbol ("AAPL", "BTCUSDT", "THYAO", "GDX")
+        exchange: Exchange (NASDAQ, NYSE, AMEX, NYSEARCA, PCX, BINANCE, KUCOIN, MEXC, BIST, EGX, TWSE, TPEX)
         timeframe: Analysis timeframe (5m, 15m, 1h, 4h, 1D, 1W)
     """
     tech = coin_analysis(symbol, exchange, timeframe)
