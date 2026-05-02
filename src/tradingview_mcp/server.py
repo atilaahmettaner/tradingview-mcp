@@ -47,6 +47,7 @@ from tradingview_mcp.core.services.yahoo_finance_service import (
     get_price,
     get_market_snapshot,
 )
+from tradingview_mcp.core.services.bitcoin_market_service import get_bitcoin_market_pulse
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -618,6 +619,26 @@ def market_snapshot() -> dict:
     Powered by Yahoo Finance.
     """
     return get_market_snapshot()
+
+
+@mcp.tool()
+def bitcoin_market_pulse() -> dict:
+    """Single-call BTC macro context: price, dominance, total market cap + risk assessment.
+
+    Use this WHENEVER analyzing any cryptocurrency (altcoin or BTC itself) to
+    get the broader market frame in one shot. A SOL/ETH/whatever setup looks
+    very different when BTC is dumping with rising dominance vs. when alts
+    are leading. Calling this once gives Claude the macro context to provide
+    Bitcoin-aware commentary alongside the per-coin analysis - without
+    chaining 2-3 separate yahoo_price + manual reasoning calls.
+
+    Returns:
+      - bitcoin: price, 24h change %, volume, market cap
+      - dominance: BTC and ETH market-cap share of total crypto
+      - total_market: total crypto mcap + 24h change + active coin count
+      - assessment: label (HIGH_RISK / ALT_RISK / ALT_FAVORABLE / OPPORTUNITY_WITH_CAUTION / NEUTRAL) + 1-paragraph reasoning
+    """
+    return get_bitcoin_market_pulse()
 
 
 # ── Resource ───────────────────────────────────────────────────────────────────
