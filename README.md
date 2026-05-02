@@ -1,7 +1,11 @@
 # 📈 AI Trading Intelligence Framework — MCP Server
 
 <a href="https://trendshift.io/repositories/25110" target="_blank"><img src="https://trendshift.io/api/badge/repositories/25110" alt="atilaahmettaner%2Ftradingview-mcp | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
+> **🚀 Don't want to fight `uv` / `pandas` / Python on Windows?**  
+> [**pro.cryptosieve.com**](https://pro.cryptosieve.com) — same 30+ tools,  
+> one connector URL into Claude.ai, ChatGPT, Copilot, Cursor. **$9/month** with 7-day free trial.  
+> Self-hosting is free and always will be; the hosted version is just for  
+> folks who'd rather skip the ops dance.
 **The most complete AI-powered trading toolkit for Claude and MCP clients.**
 Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — all in one MCP server.
 
@@ -27,11 +31,7 @@ Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — 
 
 
 ---
-> **🚀 Don't want to fight `uv`/`pandas`/Python on Windows?**  
-> [**pro.cryptosieve.com**](https://pro.cryptosieve.com) — same 27 tools,  
-> one connector URL into Claude.ai,Chatgpt, Copilot, Cursor **$9/month** with 7-day free trial.  
-> Self-hosting is free and always will be; the hosted version is just for  
-> folks who'd rather skip the ops dance.
+
 ## 🎥 Framework Demo
 
 https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-4a605d98-43e8-49a6-8d3a-559315f6c01d.mp4
