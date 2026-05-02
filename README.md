@@ -24,7 +24,7 @@ Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — 
 <a href="https://github.com/sponsors/atilaahmettaner">
   <img src="https://img.shields.io/badge/💎_Pro_($30)-Sponsor-gold?style=for-the-badge&logo=github-sponsors" alt="Sponsor $30"/>
 </a>
----
+
 > **🚀 Don't want to fight `uv` / `pandas` / Python on Windows?**  
 > [**pro.cryptosieve.com**](https://pro.cryptosieve.com) — same 30+ tools,  
 > one connector URL into Claude.ai, ChatGPT, Copilot, Cursor. **$9/month** with 7-day free trial.  
