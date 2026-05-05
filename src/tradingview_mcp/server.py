@@ -48,6 +48,7 @@ from tradingview_mcp.core.services.yahoo_finance_service import (
     get_market_snapshot,
 )
 from tradingview_mcp.core.services.bitcoin_market_service import get_bitcoin_market_pulse
+from tradingview_mcp.core.services.extended_hours_service import get_extended_hours_price
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -639,6 +640,32 @@ def bitcoin_market_pulse() -> dict:
       - assessment: label (HIGH_RISK / ALT_RISK / ALT_FAVORABLE / OPPORTUNITY_WITH_CAUTION / NEUTRAL) + 1-paragraph reasoning
     """
     return get_bitcoin_market_pulse()
+
+
+@mcp.tool()
+def stock_extended_hours(symbol: str) -> dict:
+    """Real-time pre-market and after-hours prices for a US stock symbol.
+
+    Use this when the user asks about a stock outside the regular 9:30am-4pm
+    ET session — earnings reactions, overnight news, "what is X doing in
+    after-hours?", "how did Y open in pre-market?". Returns the most recent
+    valid print from each session window (pre-market, regular, post-market)
+    along with computed % changes vs. the previous close and the regular
+    close, respectively.
+
+    During the regular session, post_market will be null (no data yet).
+    On weekends/holidays, returns whatever's most recent in each window.
+
+    Args:
+        symbol: US stock symbol — AAPL, NVDA, TSLA, SPY, ^GSPC, etc.
+
+    Returns:
+        - pre_market: {price, as_of_utc, change_vs_previous_close_pct} or null
+        - regular: {price, as_of_utc, change_pct} (consolidated tape close)
+        - post_market: {price, as_of_utc, change_vs_regular_close_pct} or null
+        - previous_close, currency, exchange, market_state for context
+    """
+    return get_extended_hours_price(symbol)
 
 
 # ── Resource ───────────────────────────────────────────────────────────────────
