@@ -92,6 +92,23 @@ _EXCHANGE_TV_PREFIX: dict = {
     "tpex": "TPEX",
 }
 
+_YAHOO_SYMBOL_ALIASES: dict = {
+    "TAIEX": "^TWII",
+    "TAIEX.TW": "^TWII",
+    "^TWII": "^TWII",
+    "TWSE:TAIEX": "^TWII",
+    "TWSE:IX0001": "^TWII",
+}
+
+_TRADINGVIEW_SYMBOL_ALIASES: dict = {
+    "TAIEX": "TWSE:IX0001",
+    "TAIEX.TW": "TWSE:IX0001",
+    "^TWII": "TWSE:IX0001",
+    "IX0001": "TWSE:IX0001",
+    "TWSE:TAIEX": "TWSE:IX0001",
+    "TWSE:IX0001": "TWSE:IX0001",
+}
+
 
 def get_tv_exchange_prefix(exchange: str) -> str:
     """Return the TradingView symbol prefix for *exchange* (e.g. ``AMEX`` for ``nysearca``).
@@ -100,6 +117,22 @@ def get_tv_exchange_prefix(exchange: str) -> str:
     that crypto exchanges (KUCOIN, BINANCE, …) still work as before.
     """
     return _EXCHANGE_TV_PREFIX.get(exchange.strip().lower(), exchange.upper())
+
+
+def normalize_yahoo_symbol(symbol: str) -> str:
+    """Return a provider-specific Yahoo Finance symbol for common user aliases."""
+    raw = (symbol or "").strip().upper()
+    return _YAHOO_SYMBOL_ALIASES.get(raw, raw)
+
+
+def normalize_tradingview_symbol(symbol: str, exchange: str) -> str:
+    """Return a fully-qualified TradingView symbol, resolving common index aliases."""
+    raw = (symbol or "").strip().upper()
+    if raw in _TRADINGVIEW_SYMBOL_ALIASES:
+        return _TRADINGVIEW_SYMBOL_ALIASES[raw]
+    if ":" in raw:
+        return raw
+    return f"{get_tv_exchange_prefix(exchange)}:{raw}"
 
 # Get absolute path to coinlist directory relative to this module
 # This file is at: src/tradingview_mcp/core/utils/validators.py

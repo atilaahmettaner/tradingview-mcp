@@ -17,6 +17,8 @@ import pytest
 from tradingview_mcp.core.utils.validators import (
     sanitize_exchange,
     get_tv_exchange_prefix,
+    normalize_tradingview_symbol,
+    normalize_yahoo_symbol,
     is_stock_exchange,
     EXCHANGE_SCREENER,
     STOCK_EXCHANGES,
@@ -131,6 +133,29 @@ class TestGetTvExchangePrefix:
         symbol = "AMEX:GDX"  # already qualified
         full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
         assert full_symbol == "AMEX:GDX"
+
+
+# ── Taiwan index aliases ──────────────────────────────────────────────────────
+
+class TestTaiwanIndexAliases:
+    """Common TAIEX aliases should resolve to provider-specific working symbols."""
+
+    @pytest.mark.parametrize("raw", ["TAIEX", "TAIEX.TW", "^TWII", "TWSE:TAIEX", "TWSE:IX0001"])
+    def test_taiex_aliases_resolve_to_yahoo_twii(self, raw):
+        assert normalize_yahoo_symbol(raw) == "^TWII"
+
+    @pytest.mark.parametrize("raw", ["TAIEX", "TAIEX.TW", "^TWII", "IX0001"])
+    def test_taiex_aliases_resolve_to_tradingview_ix0001(self, raw):
+        assert normalize_tradingview_symbol(raw, "twse") == "TWSE:IX0001"
+
+    def test_prequalified_taiex_resolves_to_tradingview_ix0001(self):
+        assert normalize_tradingview_symbol("TWSE:TAIEX", "twse") == "TWSE:IX0001"
+
+    def test_normal_stock_symbol_still_uses_exchange_prefix(self):
+        assert normalize_tradingview_symbol("2330", "twse") == "TWSE:2330"
+
+    def test_prequalified_normal_symbol_still_survives(self):
+        assert normalize_tradingview_symbol("TWSE:2330", "twse") == "TWSE:2330"
 
 
 # ── Regression: existing exchanges still work ─────────────────────────────────
