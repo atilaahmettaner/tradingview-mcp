@@ -81,6 +81,28 @@ pip install tradingview-mcp-server
 
 On Linux, replace `/Users/YOUR_USERNAME` with `/home/YOUR_USERNAME`. On Windows, use `%USERPROFILE%\.local\bin\uvx.exe`.
 
+### Codex Plugin Config
+
+This repository also includes mcp-only Codex plugin metadata:
+
+- `.codex-plugin/plugin.json`
+- `.codex-mcp.json`
+
+The plugin uses the same PyPI package entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "tradingview": {
+      "command": "uvx",
+      "args": ["--from", "tradingview-mcp-server", "tradingview-mcp"]
+    }
+  }
+}
+```
+
+After installing or enabling the Codex plugin, restart Codex so the MCP server is loaded in the next session. Depending on your Codex version, `codex mcp list` may show registered MCP servers, but tool availability should be verified in a fresh Codex session.
+
 ### Or run from source
 ```bash
 git clone https://github.com/atilaahmettaner/tradingview-mcp

@@ -1,0 +1,36 @@
+{
+  "name": "tradingview-mcp",
+  "version": "0.7.1",
+  "description": "TradingView MCP server for market prices, screeners, sentiment, backtesting, and technical analysis.",
+  "author": {
+    "name": "TradingView MCP contributors"
+  },
+  "homepage": "https://github.com/atilaahmettaner/tradingview-mcp",
+  "repository": "https://github.com/atilaahmettaner/tradingview-mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "tradingview",
+    "market-data",
+    "technical-analysis",
+    "backtesting"
+  ],
+  "mcpServers": "./.codex-mcp.json",
+  "interface": {
+    "displayName": "TradingView MCP",
+    "shortDescription": "Market data and technical-analysis MCP tools",
+    "longDescription": "TradingView MCP server for market prices, screeners, sentiment, backtesting, and 30+ technical-analysis tools.",
+    "developerName": "TradingView MCP contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/atilaahmettaner/tradingview-mcp",
+    "defaultPrompt": [
+      "Show me the available TradingView MCP tools",
+      "Analyze BTCUSDT with TradingView MCP",
+      "Find today's top gainers with TradingView MCP"
+    ],
+    "brandColor": "#2962FF"
+  }
+}
