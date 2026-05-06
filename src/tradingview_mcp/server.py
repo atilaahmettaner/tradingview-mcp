@@ -57,7 +57,8 @@ from tradingview_mcp.core.services.backtest_service import (
 from tradingview_mcp.core.utils.validators import (
     sanitize_timeframe,
     sanitize_exchange,
-    get_tv_exchange_prefix,
+    normalize_tradingview_symbol,
+    normalize_yahoo_symbol,
 )
 
 try:
@@ -320,7 +321,7 @@ def multi_agent_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str =
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
-    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
+    full_symbol = normalize_tradingview_symbol(symbol, exchange)
     return run_multi_agent_analysis(full_symbol, exchange, timeframe)
 
 
@@ -448,7 +449,7 @@ def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dict:
         exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
-    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
+    full_symbol = normalize_tradingview_symbol(symbol, exchange)
     return run_multi_timeframe_analysis(full_symbol, exchange)
 
 
@@ -611,7 +612,7 @@ def yahoo_price(symbol: str) -> dict:
     Args:
         symbol: Yahoo Finance symbol — e.g. AAPL, BTC-USD, SPY, ^GSPC, EURUSD=X, THYAO.IS
     """
-    return get_price(symbol)
+    return get_price(normalize_yahoo_symbol(symbol))
 
 
 @mcp.tool()
