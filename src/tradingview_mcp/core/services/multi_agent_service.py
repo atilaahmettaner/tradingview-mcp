@@ -10,7 +10,11 @@ from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER
 
 try:
-    from tradingview_ta import get_multiple_analysis
+    # Patched: route through resilience layer (retry + 60s TTL cache).
+    import tradingview_ta  # noqa: F401  presence check
+    from tradingview_mcp.core.services.screener_provider import (
+        resilient_get_multiple_analysis as get_multiple_analysis,
+    )
     _TA_AVAILABLE = True
 except ImportError:
     _TA_AVAILABLE = False

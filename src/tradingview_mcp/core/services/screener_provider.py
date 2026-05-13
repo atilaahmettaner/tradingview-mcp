@@ -1,6 +1,147 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ..utils.validators import get_market_type
+import json as _json
+import os as _os
+import sys as _sys
+import time as _time
+from threading import RLock as _RLock
+
+
+# --- Resilience layer (added 2026-05-13) -----------------------------------
+# TradingView's scanner.tradingview.com endpoint occasionally returns an empty
+# body on transient hiccups, causing tradingview-screener to raise
+# json.JSONDecodeError("Expecting value: line 1 column 1 (char 0)").
+# We retry with exponential backoff and cache successful results briefly to
+# absorb these blips without surfacing them to skill callers.
+#
+# Tunables (env vars):
+#   TRADINGVIEW_MCP_CACHE_TTL   default 60 (seconds). Set 0 to disable cache.
+#   TRADINGVIEW_MCP_RETRY_DELAYS default "0.5,1.5,4.0" (sec, comma-separated)
+
+def _cache_ttl_s() -> float:
+    try:
+        return float(_os.environ.get('TRADINGVIEW_MCP_CACHE_TTL', '60'))
+    except Exception:
+        return 60.0
+
+
+def _retry_delays() -> tuple:
+    raw = _os.environ.get('TRADINGVIEW_MCP_RETRY_DELAYS', '0.5,1.5,4.0')
+    try:
+        return tuple(float(x) for x in raw.split(',') if x.strip())
+    except Exception:
+        return (0.5, 1.5, 4.0)
+
+
+_SCREENER_CACHE: Dict[Tuple, Tuple[float, Tuple[int, Any]]] = {}
+_SCREENER_CACHE_LOCK = _RLock()
+
+
+def _cache_get(key: Tuple):
+    ttl = _cache_ttl_s()
+    if ttl <= 0:
+        return None
+    with _SCREENER_CACHE_LOCK:
+        entry = _SCREENER_CACHE.get(key)
+        if not entry:
+            return None
+        ts, payload = entry
+        if _time.time() - ts > ttl:
+            _SCREENER_CACHE.pop(key, None)
+            return None
+        return payload
+
+
+def _cache_set(key: Tuple, payload: Tuple[int, Any]) -> None:
+    if _cache_ttl_s() <= 0:
+        return
+    with _SCREENER_CACHE_LOCK:
+        _SCREENER_CACHE[key] = (_time.time(), payload)
+
+
+def _is_transient_screener_error(e: BaseException) -> bool:
+    """True if the error looks like an upstream transient (empty body,
+    JSON parse failure, connection reset, rate limit message)."""
+    if isinstance(e, _json.JSONDecodeError):
+        return True
+    msg = str(e)
+    return any(s in msg for s in (
+        'Expecting value',
+        'Connection reset',
+        'Connection aborted',
+        'Read timed out',
+        'Temporary failure',
+    ))
+
+
+def _scan_with_retry(q, cookies=None):
+    """Wrap Query.get_scanner_data with retries on transient TV outages.
+    Returns (total, df). Re-raises on non-transient errors or on final failure."""
+    delays = (0.0,) + _retry_delays()  # immediate try, then back off
+    last_exc: Optional[BaseException] = None
+    for i, delay in enumerate(delays):
+        if delay > 0:
+            _time.sleep(delay)
+        try:
+            return q.get_scanner_data(cookies=cookies)
+        except Exception as e:  # noqa: BLE001 - intentionally broad, narrowed below
+            if not _is_transient_screener_error(e):
+                raise
+            last_exc = e
+            try:
+                print(
+                    f"[tradingview_mcp] transient scanner error (attempt {i+1}/{len(delays)}): {e!r}",
+                    file=_sys.stderr,
+                )
+            except Exception:
+                pass
+            continue
+    # All attempts exhausted
+    assert last_exc is not None
+    raise last_exc
+
+
+def resilient_get_multiple_analysis(screener, interval, symbols):
+    """Drop-in replacement for tradingview_ta.get_multiple_analysis with the
+    same resilience layer used by the screener calls (retry + 60s TTL cache).
+    Required because coin_analysis / combined_analysis / multi_timeframe_analysis
+    use tradingview_ta directly and hit the same transient JSON errors when
+    TradingView's scanner endpoint returns an empty body."""
+    try:
+        from tradingview_ta import get_multiple_analysis as _gma  # type: ignore
+    except Exception as e:
+        raise ImportError("tradingview_ta is not installed") from e
+
+    sym_key = tuple(sorted(symbols)) if symbols else ()
+    cache_key = ('ta_multi_v1', screener, interval, sym_key)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    delays = (0.0,) + _retry_delays()
+    last_exc: Optional[BaseException] = None
+    for i, delay in enumerate(delays):
+        if delay > 0:
+            _time.sleep(delay)
+        try:
+            result = _gma(screener=screener, interval=interval, symbols=symbols)
+            _cache_set(cache_key, result)
+            return result
+        except Exception as e:  # noqa: BLE001
+            if not _is_transient_screener_error(e):
+                raise
+            last_exc = e
+            try:
+                print(
+                    f"[tradingview_mcp] transient TA error (attempt {i+1}/{len(delays)}): {e!r}",
+                    file=_sys.stderr,
+                )
+            except Exception:
+                pass
+            continue
+    assert last_exc is not None
+    raise last_exc
 
 
 def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
@@ -70,7 +211,20 @@ def fetch_screener_indicators(
     if limit:
         q = q.limit(int(limit))
 
-    total, df = q.get_scanner_data(cookies=cookies)
+    # Cache key: scope to indicators_v1 to avoid collisions with multi_changes.
+    _cache_key = (
+        'indicators_v1',
+        exchange_code,
+        tuple(sorted(symbols)) if symbols else None,
+        timeframe,
+        int(limit) if limit else None,
+    )
+    _cached = _cache_get(_cache_key)
+    if _cached is not None:
+        total, df = _cached
+    else:
+        total, df = _scan_with_retry(q, cookies=cookies)
+        _cache_set(_cache_key, (total, df))
 
     rows: List[Dict[str, Any]] = []
     if df is None or df.empty:
@@ -173,7 +327,22 @@ def fetch_screener_multi_changes(
     if limit:
         q = q.limit(int(limit))
 
-    total, df = q.get_scanner_data(cookies=cookies)
+    # Cache key: scope to multichanges_v1 to avoid collisions with indicators.
+    _cache_key = (
+        'multichanges_v1',
+        exchange_code,
+        tuple(sorted(symbols)) if symbols else None,
+        tuple(sorted(suffix_map.keys())),
+        base_timeframe,
+        int(limit) if limit else None,
+    )
+    _cached = _cache_get(_cache_key)
+    if _cached is not None:
+        total, df = _cached
+    else:
+        total, df = _scan_with_retry(q, cookies=cookies)
+        _cache_set(_cache_key, (total, df))
+
     rows: List[Dict[str, Any]] = []
     if df is None or df.empty:
         return rows
