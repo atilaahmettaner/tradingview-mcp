@@ -6,8 +6,13 @@ No API keys required. Pulls from free, public RSS feeds.
 
 Sources:
   crypto: CoinDesk, Cointelegraph
-  stocks: Reuters Business News
+  stocks: Yahoo Finance, MarketWatch (Top + Real-Time), CNBC
   all:    Combined
+
+Note (2026-05-14): Original Reuters feeds (feeds.reuters.com) are deprecated
+since ~2020 — they return zero entries. Replaced with Yahoo Finance,
+MarketWatch, and CNBC which return live data. A `User-Agent` header is
+required for some publishers (Yahoo, CNBC) to serve the feed correctly.
 """
 from __future__ import annotations
 
@@ -29,16 +34,23 @@ RSS_FEEDS: dict[str, list[dict]] = {
         {"url": "https://cointelegraph.com/rss", "name": "CoinTelegraph"},
     ],
     "stocks": [
-        {"url": "https://feeds.reuters.com/reuters/businessNews", "name": "Reuters Business"},
-        {"url": "https://feeds.reuters.com/reuters/companyNews", "name": "Reuters Company"},
+        {"url": "https://finance.yahoo.com/news/rssindex", "name": "Yahoo Finance"},
+        {"url": "https://feeds.content.dowjones.io/public/rss/mw_topstories", "name": "MarketWatch Top Stories"},
+        {"url": "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines", "name": "MarketWatch Real-Time"},
+        {"url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114", "name": "CNBC Top News"},
     ],
     "all": [
-        {"url": "https://feeds.reuters.com/reuters/businessNews", "name": "Reuters Business"},
+        {"url": "https://finance.yahoo.com/news/rssindex", "name": "Yahoo Finance"},
+        {"url": "https://feeds.content.dowjones.io/public/rss/mw_topstories", "name": "MarketWatch Top Stories"},
+        {"url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114", "name": "CNBC Top News"},
         {"url": "https://www.coindesk.com/arc/outboundfeeds/rss/", "name": "CoinDesk"},
         {"url": "https://cointelegraph.com/rss", "name": "CoinTelegraph"},
     ],
 }
 
+# Some publishers (Yahoo, CNBC) return empty feeds to the default urllib UA.
+# Setting a browser-like UA produces live data.
+_FEED_USER_AGENT = "Mozilla/5.0 (compatible; tradingview-mcp/0.7.1; +https://github.com/atilaahmettaner/tradingview-mcp)"
 _TIMEOUT = 8
 
 
@@ -74,7 +86,7 @@ def fetch_news(
         if len(results) >= limit:
             break
         try:
-            feed = feedparser.parse(feed_info["url"])
+            feed = feedparser.parse(feed_info["url"], agent=_FEED_USER_AGENT)
             source_name = feed.feed.get("title", feed_info["name"])
 
             for entry in feed.entries:
