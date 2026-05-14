@@ -544,6 +544,8 @@ def backtest_strategy(
     Args:
         symbol: Yahoo Finance symbol (AAPL, BTC-USD, THYAO.IS, ^GSPC)
         strategy: rsi | bollinger | macd | ema_cross | supertrend | donchian
+                  | rsi_pullback | keltner_breakout | triple_ema
+                  (rsi_pullback and triple_ema need period >= '1y' for SMA200 warmup)
         period: '1mo', '3mo', '6mo', '1y', '2y'
         initial_capital: Starting capital in USD (default $10,000)
         commission_pct: Per-trade commission % (default 0.1%)
@@ -566,11 +568,13 @@ def compare_strategies(
     initial_capital: float = 10000.0,
     interval: str = "1d",
 ) -> dict:
-    """Run all 6 strategies (RSI, Bollinger, MACD, EMA Cross, Supertrend, Donchian) and return a ranked leaderboard.
+    """Run all 9 strategies (RSI, Bollinger, MACD, EMA Cross, Supertrend, Donchian, RSI Pullback, Keltner Breakout, Triple EMA) and return a ranked leaderboard.
 
     Args:
         symbol: Yahoo Finance symbol (AAPL, BTC-USD, SPY…)
         period: '1mo', '3mo', '6mo', '1y', '2y'
+                (period >= '1y' recommended so rsi_pullback and triple_ema can
+                 complete SMA200 warmup; otherwise they contribute zero trades)
         initial_capital: Starting capital in USD (default $10,000)
         interval: '1d' (daily) or '1h' (hourly)
     """
@@ -594,6 +598,9 @@ def walk_forward_backtest_strategy(
     Args:
         symbol: Yahoo Finance symbol (AAPL, BTC-USD, SPY…)
         strategy: rsi | bollinger | macd | ema_cross | supertrend | donchian
+                  | keltner_breakout
+                  (rsi_pullback and triple_ema not supported here — SMA200 warmup
+                   exceeds typical fold size; use run_backtest with period='2y')
         period: '1mo', '3mo', '6mo', '1y', '2y' (recommend '2y')
         initial_capital: Starting capital per fold in USD (default $10,000)
         commission_pct: Per-trade commission % (default 0.1%)
