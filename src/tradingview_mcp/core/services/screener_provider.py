@@ -5,7 +5,7 @@ import json as _json
 import os as _os
 import sys as _sys
 import time as _time
-from threading import RLock as _RLock
+from threading import RLock as _RLock, Semaphore as _Semaphore, Lock as _Lock
 
 
 # --- Resilience layer (added 2026-05-13) -----------------------------------
@@ -58,6 +58,58 @@ def _cache_set(key: Tuple, payload: Tuple[int, Any]) -> None:
         return
     with _SCREENER_CACHE_LOCK:
         _SCREENER_CACHE[key] = (_time.time(), payload)
+
+
+# --- Throttle for tradingview_ta calls (added 2026-05-15) -----------------
+# Caps in-flight TA calls and enforces minimum interval between call starts
+# to prevent parallel skill batches from all hitting the empty-body
+# rate-limit cliff at the same time. Retry alone (above) recovers from a hit
+# but doesn't prevent it; this layer keeps us under the cliff.
+#
+# Tunables (env vars):
+#   TRADINGVIEW_MCP_MAX_INFLIGHT    default 4 (max concurrent TA calls)
+#   TRADINGVIEW_MCP_MIN_INTERVAL_S  default 0.8 (min seconds between starts)
+
+
+def _max_inflight() -> int:
+    try:
+        return max(1, int(_os.environ.get('TRADINGVIEW_MCP_MAX_INFLIGHT', '4')))
+    except Exception:
+        return 4
+
+
+def _min_interval_s() -> float:
+    try:
+        return max(0.0, float(_os.environ.get('TRADINGVIEW_MCP_MIN_INTERVAL_S', '0.8')))
+    except Exception:
+        return 0.8
+
+
+_TA_SEMAPHORE = _Semaphore(_max_inflight())
+_TA_INTERVAL_LOCK = _Lock()
+_TA_LAST_CALL_TS: float = 0.0
+
+
+def _ta_throttle_acquire() -> None:
+    """Block until a slot is free AND min-interval since last call elapsed.
+    Caller MUST pair with _ta_throttle_release() in a finally block."""
+    global _TA_LAST_CALL_TS
+    _TA_SEMAPHORE.acquire()
+    try:
+        with _TA_INTERVAL_LOCK:
+            now = _time.time()
+            wait = _min_interval_s() - (now - _TA_LAST_CALL_TS)
+            if wait > 0:
+                _time.sleep(wait)
+                now = _time.time()
+            _TA_LAST_CALL_TS = now
+    except BaseException:
+        _TA_SEMAPHORE.release()
+        raise
+
+
+def _ta_throttle_release() -> None:
+    _TA_SEMAPHORE.release()
 
 
 def _is_transient_screener_error(e: BaseException) -> bool:
@@ -125,7 +177,11 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
         if delay > 0:
             _time.sleep(delay)
         try:
-            result = _gma(screener=screener, interval=interval, symbols=symbols)
+            _ta_throttle_acquire()
+            try:
+                result = _gma(screener=screener, interval=interval, symbols=symbols)
+            finally:
+                _ta_throttle_release()
             _cache_set(cache_key, result)
             return result
         except Exception as e:  # noqa: BLE001
