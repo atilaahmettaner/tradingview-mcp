@@ -54,6 +54,19 @@ from tradingview_mcp.core.services.backtest_service import (
     compare_strategies as _compare_strategies,
     walk_forward_backtest,
 )
+from tradingview_mcp.core.services.fundamentals_service import (
+    get_fundamentals,
+    compare_peers as _compare_peers,
+    get_dividend_info,
+)
+from tradingview_mcp.core.services.risk_service import (
+    position_size as _position_size,
+    risk_reward as _risk_reward,
+    kelly_criterion as _kelly_criterion,
+    correlation_matrix as _correlation_matrix,
+    value_at_risk as _value_at_risk,
+)
+from tradingview_mcp.core.services.investment_thesis_service import generate_investment_thesis
 from tradingview_mcp.core.utils.validators import (
     sanitize_timeframe,
     sanitize_exchange,
@@ -600,6 +613,210 @@ def walk_forward_backtest_strategy(
     return walk_forward_backtest(
         symbol, strategy, period, initial_capital,
         commission_pct, slippage_pct, n_splits, train_ratio, interval,
+    )
+
+
+# ── Fundamental analysis tools ─────────────────────────────────────────────────
+
+@mcp.tool()
+def stock_fundamentals(symbol: str) -> dict:
+    """Full fundamental analysis: valuation, profitability, growth, balance sheet, dividend.
+
+    Pulls P/E, P/B, EPS, ROE, ROA, profit margins, revenue/earnings growth,
+    debt/equity, free cash flow, dividend yield, and analyst targets from
+    Yahoo Finance — then synthesises a fundamental verdict
+    (STRONG_FUNDAMENTAL_BUY / FUNDAMENTAL_BUY / HOLD / SELL / STRONG_SELL)
+    with bullish and bearish factor lists.
+
+    Use this for ANY equity question that's not purely technical — "Is AAPL
+    fairly valued?", "Is TSLA's growth slowing?", "How leveraged is META?".
+
+    Args:
+        symbol: Yahoo Finance ticker — AAPL, MSFT, TSLA, THYAO.IS, COMI.CA, 600519.SS, 2330.TW
+    """
+    return get_fundamentals(symbol)
+
+
+@mcp.tool()
+def compare_peers(symbols: list[str]) -> dict:
+    """Side-by-side fundamental comparison across up to 8 tickers.
+
+    Returns a row-per-symbol table of valuation/profitability/growth metrics
+    plus per-metric leaders (cheapest P/E, highest ROE, lowest leverage, etc.).
+    Useful for "is AAPL cheaper than its FAANG peers?" or "which BIST bank
+    has the best fundamentals right now?".
+
+    Args:
+        symbols: List of Yahoo tickers, e.g. ["AAPL", "MSFT", "NVDA", "GOOG"]
+                 BIST: ["GARAN.IS", "AKBNK.IS", "ISCTR.IS"]
+    """
+    if not symbols:
+        return {"error": "provide at least one symbol"}
+    return _compare_peers(symbols)
+
+
+@mcp.tool()
+def dividend_info(symbol: str) -> dict:
+    """Income-focused view: yield, payout ratio, ex-dividend date, sustainability flags.
+
+    For dividend investors who care about cash flow over capital appreciation.
+    Grades the income (LOW/STANDARD/HIGH/ULTRA_HIGH) and flags unsustainable
+    payouts (e.g. dividend exceeds free cash flow).
+
+    Args:
+        symbol: Yahoo Finance ticker — KO, JNJ, T, VZ, AAPL, etc.
+    """
+    return get_dividend_info(symbol)
+
+
+# ── Risk & position sizing tools ───────────────────────────────────────────────
+
+@mcp.tool()
+def position_sizing(
+    account_size: float,
+    risk_pct: float,
+    entry: float,
+    stop: float,
+) -> dict:
+    """Calculate how many units to buy given account, max-risk %, and stop-loss.
+
+    Implements the 1-2% rule: never risk more than X% of account on a single
+    trade. Output includes unit count, total position value, exposure %,
+    and warnings for over-concentration or unreasonable stop distances.
+
+    Args:
+        account_size: Total trading capital in dollars (e.g. 50000)
+        risk_pct: Max % of account to lose if stop hits (typically 0.5-2)
+        entry: Planned entry price
+        stop: Planned stop-loss price (below entry for long, above for short)
+    """
+    return _position_size(account_size, risk_pct, entry, stop)
+
+
+@mcp.tool()
+def risk_reward_calc(entry: float, stop: float, target: float) -> dict:
+    """R-multiple risk/reward analyzer for a planned trade.
+
+    Returns the reward/risk ratio (R-multiple), a grade (EXCELLENT 3R+ /
+    GOOD 2-3R / MARGINAL 1-2R / POOR <1R), and the breakeven win rate
+    needed. Below 1R the trade is a structural negative-edge bet that no
+    win rate can save.
+
+    Args:
+        entry: Entry price
+        stop: Stop-loss price
+        target: Take-profit / target price
+    """
+    return _risk_reward(entry, stop, target)
+
+
+@mcp.tool()
+def kelly_position_size(
+    win_rate_pct: float,
+    win_loss_ratio: float,
+    capital: float = 10000.0,
+    kelly_fraction: float = 0.5,
+) -> dict:
+    """Kelly Criterion optimal bet sizing based on historical win rate and avg win/loss.
+
+    Full Kelly is mathematically optimal but emotionally brutal (50%+ drawdowns).
+    Most pros use Half Kelly (default 0.5) or Quarter Kelly. Returns NEGATIVE_EDGE
+    verdict if Kelly is non-positive — meaning the strategy has no edge and you
+    shouldn't trade it at any size.
+
+    Args:
+        win_rate_pct: Historical win rate, e.g. 55 for 55%
+        win_loss_ratio: Average win size / average loss size (e.g. 1.5)
+        capital: Account size (default $10,000)
+        kelly_fraction: Multiplier on full Kelly — 0.25 quarter, 0.5 half (default), 1.0 full
+    """
+    return _kelly_criterion(win_rate_pct, win_loss_ratio, capital, kelly_fraction)
+
+
+@mcp.tool()
+def correlation_matrix(symbols: list[str], period: str = "6mo") -> dict:
+    """Pairwise correlation of daily returns across a portfolio.
+
+    Diversification check: > 0.7 means assets move as one (no real diversification),
+    < 0.3 means meaningfully diversified, < 0 means hedged. Flags notable pairs
+    that warrant rebalancing.
+
+    Args:
+        symbols: Up to 8 Yahoo tickers — ["AAPL", "MSFT", "TSLA", "BTC-USD", "GLD"]
+        period: '1mo' | '3mo' | '6mo' | '1y' | '2y' (default 6mo)
+    """
+    return _correlation_matrix(symbols, period)
+
+
+@mcp.tool()
+def value_at_risk_analysis(
+    symbol: str,
+    position_value: float,
+    period: str = "6mo",
+    confidence: float = 0.95,
+    horizon_days: int = 1,
+) -> dict:
+    """Value at Risk for a single position — historical, parametric, and expected shortfall.
+
+    Tells you the worst plausible loss on a position over a given horizon at a
+    given confidence level. Historical VaR uses the empirical return distribution
+    (no normality assumption), parametric assumes Normal returns. Expected
+    Shortfall (CVaR) gives the average loss when things go beyond VaR.
+
+    Args:
+        symbol: Yahoo ticker — AAPL, BTC-USD, SPY, ^GSPC
+        position_value: Current dollar value of the position
+        period: History window — '3mo', '6mo', '1y', '2y' (default 6mo)
+        confidence: 0.90, 0.95, 0.975, or 0.99 (default 0.95)
+        horizon_days: Forward-looking loss horizon in days (default 1)
+    """
+    return _value_at_risk(symbol, position_value, period, confidence, horizon_days)
+
+
+# ── Investment thesis (orchestration) ──────────────────────────────────────────
+
+@mcp.tool()
+def investment_thesis(
+    symbol: str,
+    exchange: str = "NASDAQ",
+    timeframe: str = "1D",
+    position_value: float = 0.0,
+    include_news: bool = True,
+    include_sentiment: bool = True,
+) -> dict:
+    """FULL investment-grade thesis: technical + fundamental + sentiment + news + macro + risk.
+
+    The flagship analyst tool. Synthesizes every dimension into:
+      - Bull case: bulleted reasons to be long
+      - Bear case: bulleted reasons to be short / avoid
+      - Catalysts: news + analyst targets that move the stock
+      - Risks: macro headwinds, VaR exposure (if position_value given)
+      - Price targets: analyst consensus + technical entry/stop/target
+      - Verdict: STRONG_BUY / BUY / HOLD / SELL / STRONG_SELL
+      - Conviction: HIGH (signals align) / MEDIUM (partial confluence) / LOW (mixed)
+
+    Use this when the user asks "should I buy X?" or "give me a full report on Y".
+    For pure technicals use combined_analysis or coin_analysis; for pure fundamentals
+    use stock_fundamentals. This tool is the everything-at-once view.
+
+    Args:
+        symbol: Asset symbol — AAPL, BTCUSDT, THYAO, COMI, 600519
+        exchange: Exchange — crypto: KUCOIN/BINANCE/MEXC; stocks: NASDAQ/NYSE/BIST/EGX/SSE/SZSE/TWSE
+        timeframe: Technical TF — 1D recommended for investing, 4h/1h for swing trades
+        position_value: Optional $ amount — if >0, adds VaR risk section sized to this
+        include_news: Pull RSS news headlines (slower; default True)
+        include_sentiment: Pull Reddit sentiment (slower; default True)
+    """
+    exchange = sanitize_exchange(exchange, "NASDAQ")
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    pos_val = position_value if position_value and position_value > 0 else None
+    return generate_investment_thesis(
+        symbol=symbol,
+        exchange=exchange,
+        timeframe=timeframe,
+        position_value=pos_val,
+        include_news=include_news,
+        include_sentiment=include_sentiment,
     )
 
 

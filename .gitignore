@@ -215,6 +215,8 @@ __marimo__/
 test_nyse.py
 scripts/fetch_nyse_tickers.py
 .claude/
+# Local MCP server config — contains user-specific absolute paths
+.mcp.json
 
 # AI Agent skills — local only, never commit
 .agents/
