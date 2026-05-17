@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -49,6 +50,10 @@ from tradingview_mcp.core.services.yahoo_finance_service import (
 )
 from tradingview_mcp.core.services.bitcoin_market_service import get_bitcoin_market_pulse
 from tradingview_mcp.core.services.extended_hours_service import get_extended_hours_price
+from tradingview_mcp.core.services.options_service import (
+    get_options_chain,
+    get_unusual_options_activity,
+)
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -667,6 +672,72 @@ def stock_extended_hours(symbol: str) -> dict:
         - previous_close, currency, exchange, market_state for context
     """
     return get_extended_hours_price(symbol)
+
+
+@mcp.tool()
+def stock_options_chain(symbol: str, expiry: Optional[str] = None) -> dict:
+    """Full options chain (calls + puts) for a US stock symbol and one expiry.
+
+    Use this when the user asks "what's the options chain for X?", "show me
+    AAPL puts expiring next Friday", or wants to inspect bid/ask/IV/volume on
+    a specific strike. If no expiry is provided, returns the nearest expiry
+    so Claude can quote it back and ask "want a different one?".
+
+    Args:
+        symbol: US stock symbol — AAPL, NVDA, TSLA, SPY, etc.
+        expiry: Optional ISO date (YYYY-MM-DD). Must match one of the
+            `available_expiries` Yahoo returns; otherwise returns an error
+            with the list of valid dates.
+
+    Returns:
+        - underlying_price, underlying_change_pct
+        - requested_expiry, available_expiries (list of YYYY-MM-DD)
+        - call_count, put_count
+        - calls: list of {strike, last_price, bid, ask, volume,
+          open_interest, implied_volatility, in_the_money, expiration}
+        - puts: same shape as calls
+    """
+    return get_options_chain(symbol, expiry)
+
+
+@mcp.tool()
+def stock_options_unusual_activity(
+    symbol: str,
+    top_n: int = 10,
+    min_volume: int = 100,
+    expiries: int = 4,
+) -> dict:
+    """Top strikes by volume / open-interest ratio — institutional positioning signal.
+
+    Use this when the user asks "any unusual options activity on X?", "where
+    is the smart money positioned on NVDA before earnings?", or wants a
+    V/OI screener for a ticker. A V/OI ratio > 1 means today's volume already
+    exceeds standing open interest, which classically flags fresh institutional
+    positioning on a specific strike in a specific direction (call vs put).
+
+    Scans the soonest few expirations, filters out illiquid strikes (under
+    `min_volume`), and returns the top-N sorted by V/OI descending. Also
+    returns aggregate call vs put volume so Claude can comment on the
+    overall directional bias.
+
+    Args:
+        symbol: US stock symbol — AAPL, NVDA, TSLA, SPY, META, etc.
+        top_n: How many strikes to return. Default 10.
+        min_volume: Filter floor for today's volume — prevents noise from
+            illiquid strikes with high V/OI ratios. Default 100.
+        expiries: Number of soonest expirations to scan. Default 4
+            (typically covers ~1 month of weeklies + monthlies).
+
+    Returns:
+        - underlying_price
+        - expiries_scanned (list of YYYY-MM-DD)
+        - total_call_volume, total_put_volume, put_call_volume_ratio
+        - unusual: list of top-N contracts sorted by V/OI desc, each with
+          {strike, side (call|put), expiration, volume, open_interest,
+          v_oi_ratio, last_price, implied_volatility, in_the_money,
+          strike_vs_spot_pct (moneyness)}
+    """
+    return get_unusual_options_activity(symbol, top_n, min_volume, expiries)
 
 
 # ── Resource ───────────────────────────────────────────────────────────────────
