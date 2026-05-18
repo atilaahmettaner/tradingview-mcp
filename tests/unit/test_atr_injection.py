@@ -70,6 +70,23 @@ class TestFetchAtrForTicker:
         assert atr == pytest.approx(1.23)
         assert mocked.call_args.kwargs["json"]["columns"] == ["ATR"]
 
+    def test_daily_uses_bare_atr_column(self):
+        # Scanner exposes daily ATR as bare "ATR" — asking for "ATR|1D" returns null.
+        # Verified live against crypto/scan and egypt/scan during dev test.
+        payload = {"data": [{"s": "BINANCE:BTCUSDT", "d": [2106.30]}]}
+        with patch("requests.post", return_value=_mock_response(payload)) as mocked:
+            atr = fetch_atr_for_ticker("BINANCE:BTCUSDT", "crypto", "1D")
+        assert atr == pytest.approx(2106.30)
+        assert mocked.call_args.kwargs["json"]["columns"] == ["ATR"]
+
+    def test_weekly_keeps_its_suffix(self):
+        # Regression — weekly ATR DOES use a suffix ("ATR|1W").
+        payload = {"data": [{"s": "BINANCE:BTCUSDT", "d": [7017.78]}]}
+        with patch("requests.post", return_value=_mock_response(payload)) as mocked:
+            atr = fetch_atr_for_ticker("BINANCE:BTCUSDT", "crypto", "1W")
+        assert atr == pytest.approx(7017.78)
+        assert mocked.call_args.kwargs["json"]["columns"] == ["ATR|1W"]
+
 
 class TestFetchAtrForTickers:
     """Plural helper — same scanner endpoint, one POST for many tickers."""
@@ -84,8 +101,10 @@ class TestFetchAtrForTickers:
             ],
         }
         tickers = ["EGX:COMI", "EGX:HRHO", "EGX:EAST"]
+        # Use 4h so the suffix is preserved (1D drops the suffix — covered in
+        # test_daily_uses_bare_atr_column).
         with patch("requests.post", return_value=_mock_response(payload)) as mocked:
-            atr = fetch_atr_for_tickers(tickers, "egypt", "1D")
+            atr = fetch_atr_for_tickers(tickers, "egypt", "4h")
 
         assert atr == {
             "EGX:COMI": pytest.approx(1.45),
@@ -95,7 +114,7 @@ class TestFetchAtrForTickers:
         # All tickers go in a single POST
         kwargs = mocked.call_args.kwargs
         assert kwargs["json"]["symbols"]["tickers"] == tickers
-        assert kwargs["json"]["columns"] == ["ATR|1D"]
+        assert kwargs["json"]["columns"] == ["ATR|240"]
         assert mocked.call_count == 1
 
     def test_missing_tickers_in_response_get_none(self):

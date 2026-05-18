@@ -253,6 +253,11 @@ def fetch_atr_for_tickers(
         return {t: None for t in tickers}
 
     suffix = _tf_to_tv_resolution(timeframe)
+    # The scanner exposes daily ATR as the bare "ATR" column. Asking for
+    # "ATR|1D" returns null on every market we tested (crypto, egypt, …).
+    # Weekly and monthly DO require their suffix (ATR|1W, ATR|1M).
+    if suffix == "1D":
+        suffix = None
     col = f"ATR|{suffix}" if suffix else "ATR"
     url = f"https://scanner.tradingview.com/{screener_market}/scan"
     payload = {
