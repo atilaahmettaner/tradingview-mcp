@@ -218,6 +218,81 @@ def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
     return m.get(tf)
 
 
+def fetch_atr_for_tickers(
+    tickers: List[str],
+    screener_market: str,
+    timeframe: Optional[str] = None,
+    timeout: float = 10.0,
+) -> Dict[str, Optional[float]]:
+    """Batch-fetch ATR(14) for many tickers in a single scanner POST.
+
+    Same workaround as :func:`fetch_atr_for_ticker` but issues one HTTP request
+    for all tickers — important for callers like ``analyze_egx_index`` which
+    process 200-symbol batches and cannot afford a fan-out of N requests.
+
+    Args:
+        tickers:          Fully-qualified TradingView symbols
+                          (e.g. ``["EGX:COMI", "EGX:HRHO"]``). Empty list → ``{}``.
+        screener_market:  Scanner market path segment (``"crypto"``, ``"egypt"``,
+                          ``"america"``, …) — the same value passed as
+                          ``screener`` to ``tradingview_ta``.
+        timeframe:        Optional timeframe (``5m``, ``15m``, ``1h``, ``4h``,
+                          ``1D``, ``1W``, ``1M``). When omitted the daily ATR is
+                          returned.
+
+    Returns a dict keyed by ticker. Every input ticker is present in the
+    output; missing/failed values are ``None``. Any whole-call failure (network,
+    parse, missing requests) returns ``{ticker: None for ticker in tickers}``
+    so callers can iterate without special-casing.
+    """
+    if not tickers or not screener_market:
+        return {t: None for t in tickers}
+    try:
+        import requests  # type: ignore
+    except ImportError:
+        return {t: None for t in tickers}
+
+    suffix = _tf_to_tv_resolution(timeframe)
+    col = f"ATR|{suffix}" if suffix else "ATR"
+    url = f"https://scanner.tradingview.com/{screener_market}/scan"
+    payload = {
+        "symbols": {"tickers": list(tickers), "query": {"types": []}},
+        "columns": [col],
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        body = resp.json()
+    except Exception:  # noqa: BLE001 — graceful degrade
+        return {t: None for t in tickers}
+
+    rows = body.get("data") if isinstance(body, dict) else None
+    out: Dict[str, Optional[float]] = {t: None for t in tickers}
+    if not isinstance(rows, list):
+        return out
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        sym = row.get("s")
+        values = row.get("d") or []
+        if not sym or not values:
+            continue
+        raw = values[0]
+        if raw is None:
+            out[sym] = None
+            continue
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            out[sym] = None
+            continue
+        # NaN survives float() but is toxic downstream (stop_loss = close - 1.5*nan
+        # propagates silently). Treat as missing.
+        out[sym] = val if val == val else None  # NaN != NaN by IEEE-754
+    return out
+
+
 def fetch_atr_for_ticker(
     ticker: str,
     screener_market: str,
@@ -226,56 +301,13 @@ def fetch_atr_for_ticker(
 ) -> Optional[float]:
     """Fetch ATR(14) for a single ticker via TradingView's scanner endpoint.
 
-    Works around tradingview_ta not exposing the ATR column — coin_analysis,
-    combined_analysis, multi_timeframe_analysis all rely on that library and
-    therefore return atr=null until ATR is injected from the screener payload.
-
-    Args:
-        ticker:           Fully-qualified TradingView symbol (e.g. "BINANCE:BTCUSDT").
-        screener_market:  Scanner market path segment (e.g. "crypto", "america",
-                          "egypt") — the same value passed as `screener` to
-                          tradingview_ta.
-        timeframe:        Optional timeframe (5m, 15m, 1h, 4h, 1D, 1W, 1M). When
-                          omitted the daily ATR is returned.
-
-    Returns the float ATR or None on any failure (network, missing field, etc.).
-    Failures are silent by design so the caller can degrade gracefully.
+    Thin wrapper around :func:`fetch_atr_for_tickers` kept for the single-symbol
+    call sites that don't need batching (``analyze_coin``,
+    ``generate_egx_trade_plan``, ``analyze_egx_fibonacci``).
     """
     if not ticker or not screener_market:
         return None
-    try:
-        import requests  # type: ignore
-    except ImportError:
-        return None
-
-    suffix = _tf_to_tv_resolution(timeframe)
-    col = f"ATR|{suffix}" if suffix else "ATR"
-    url = f"https://scanner.tradingview.com/{screener_market}/scan"
-    payload = {
-        "symbols": {"tickers": [ticker], "query": {"types": []}},
-        "columns": [col],
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=timeout)
-        resp.raise_for_status()
-        body = resp.json()
-    except Exception:  # noqa: BLE001 — graceful degrade
-        return None
-
-    rows = body.get("data") if isinstance(body, dict) else None
-    if not rows:
-        return None
-    row = rows[0] if isinstance(rows, list) else None
-    if not isinstance(row, dict):
-        return None
-    values = row.get("d") or []
-    if not values:
-        return None
-    raw = values[0]
-    try:
-        return float(raw) if raw is not None else None
-    except (TypeError, ValueError):
-        return None
+    return fetch_atr_for_tickers([ticker], screener_market, timeframe, timeout).get(ticker)
 
 
 def fetch_screener_indicators(
