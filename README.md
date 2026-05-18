@@ -155,6 +155,36 @@ After the install finishes, start Claude Desktop with the normal config and the 
 
 ---
 
+## ⚠️ Error Envelope Format
+
+Tools that have adopted the structured error format return either their normal payload **or** an error envelope:
+
+```json
+{"error": {"code": "ALL_BATCHES_FAILED", "message": "All 5 batches failed; first error: JSONDecodeError(...)", "batches_attempted": 5, "batches_failed": 5, "first_error": "..."}}
+```
+
+**Why:** the previous `[]` / `{"error": "Analysis failed: ..."}` strings made it impossible to distinguish "no matches today" from "upstream rate-limit cliff." The new envelope is programmatically branchable by `code`.
+
+**Currently adopted by:** `top_gainers`, `top_losers`, `rating_filter`, `volume_breakout_scanner`, `smart_volume_scanner`. More tools will follow in subsequent PRs.
+
+**Detecting an error:**
+
+```python
+result = volume_breakout_scanner(exchange="KUCOIN")
+if isinstance(result, dict) and "error" in result:
+    code = result["error"]["code"]
+    if code == "ALL_BATCHES_FAILED":
+        # Wait + retry, raise alert, fall back to single-batch call, etc.
+        ...
+else:
+    for row in result:
+        ...
+```
+
+Stable codes are defined in [`core/errors.py`](src/tradingview_mcp/core/errors.py).
+
+---
+
 ## 📱 Use via Telegram, WhatsApp & More (OpenClaw)
 
 Connect this server to **Telegram, WhatsApp, Discord** and 20+ messaging platforms using [OpenClaw](https://openclaw.ai) — a self-hosted AI gateway. **Tested & verified on Hetzner VPS (Ubuntu 24.04).**

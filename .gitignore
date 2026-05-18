@@ -225,6 +225,7 @@ test_bitget.py
 test_refactor.py
 test_*.py
 !src/**/test_*.py
+!tests/**/test_*.py
 
 # Internal strategy docs — not for public repo
 LAUNCH_STRATEGY.md
