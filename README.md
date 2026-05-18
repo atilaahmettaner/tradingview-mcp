@@ -38,6 +38,20 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 
 ---
 
+## 🆕 What's New
+
+**Stability & Strategy Expansion (May 2026)**
+
+- **9 backtest strategies** (up from 6) — added `rsi_pullback`, `keltner_breakout`, and `triple_ema`, covering trend-pullback, ATR-normalized breakout, and SMA200-filtered EMA cross edges. `compare_strategies` now ranks the full 9.
+- **Resilience layer** — automatic retry + 60-second TTL cache on the TradingView screener provider, eliminating transient `"Expecting value"` errors on `combined_analysis` and `multi_timeframe_analysis`. *(PR [#32](https://github.com/atilaahmettaner/tradingview-mcp/pull/32) — merged)*
+- **Financial news service rebuild** — replaces deprecated Reuters RSS endpoints with Yahoo Finance, MarketWatch, and CNBC. Fixes the long-standing `count: 0` bug on `financial_news`. *(PR [#33](https://github.com/atilaahmettaner/tradingview-mcp/pull/33) — merged)*
+- **TA throttle** — caps concurrent `tradingview_ta` calls (default 4) + min 0.8s spacing between starts. Prevents parallel bursts of `combined_analysis` / `multi_timeframe_analysis` from hitting TradingView's empty-body rate-limit cliff. Tunable via env vars. *(PR [#34](https://github.com/atilaahmettaner/tradingview-mcp/pull/34) — merged)*
+- **Walk-forward backtesting** (`walk_forward_backtest_strategy`) — train/test split with overfitting verdict (ROBUST / MODERATE / WEAK / OVERFITTED).
+- **Hourly (1h) timeframe** support across `backtest_strategy`, `compare_strategies`, and `walk_forward_backtest_strategy`.
+- **Full trade log + equity curve** outputs (`include_trade_log=True`, `include_equity_curve=True`).
+
+---
+
 ## 🏗️ Architecture
 
 ![tradingview-mcp Architecture](assets/architecture.png)
@@ -50,7 +64,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 |---------|-------------------|--------------------|--------------------|
 | **Setup Time** | 5 minutes | Hours (Docker, Conda...) | Weeks (Contracts) |
 | **Cost** | Free & Open Source | Variable | $30k+/year |
-| **Backtesting** | ✅ 6 strategies + Sharpe | ❌ Manual scripting | ✅ Proprietary |
+| **Backtesting** | ✅ 9 strategies + Walk-forward + Sharpe | ❌ Manual scripting | ✅ Proprietary |
 | **Live Sentiment** | ✅ Reddit + RSS news | ❌ Separate setup | ✅ Terminal |
 | **Market Data** | ✅ Live / Real-Time | Historical / Delayed | Live |
 | **API Keys** | **None required** | Multiple (OpenAI, etc.) | N/A |
@@ -262,28 +276,35 @@ Unlike basic screeners, this framework deploys **specialized AI agents** that de
 
 ## 🔧 All 30+ MCP Tools
 
-### 📊 Backtesting Engine *(New in v0.6.0)*
+### 📊 Backtesting Engine
 
 | Tool | Description |
 |------|-------------|
-| `backtest_strategy` | Backtest 1 of 6 strategies with institutional metrics (Sharpe, Calmar, Expectancy) |
-| `compare_strategies` | Run all 6 strategies on same symbol and rank by performance |
+| `backtest_strategy` | Backtest 1 of 9 strategies with institutional metrics (Sharpe, Calmar, Expectancy). Supports `1d` and `1h` timeframes; optional full trade log + equity curve. |
+| `compare_strategies` | Run all 9 strategies on the same symbol and rank by performance. |
+| `walk_forward_backtest_strategy` | Train/test split walk-forward validation with overfitting verdict (ROBUST / MODERATE / WEAK / OVERFITTED). |
 
-**6 Strategies to Test:**
+**9 Strategies to Test:**
 - `rsi` — RSI oversold/overbought mean reversion
 - `bollinger` — Bollinger Band mean reversion
 - `macd` — MACD golden/death cross
 - `ema_cross` — EMA 20/50 Golden/Death Cross
 - `supertrend` — ATR-based Supertrend trend following 🔥
 - `donchian` — Donchian Channel breakout (Turtle Trader style)
+- `rsi_pullback` — Dip-buy in confirmed uptrend (SMA50>SMA200 + RSI<40 entry) 🆕
+- `keltner_breakout` — ATR-normalized breakout (EMA20 + 2·ATR upper band) 🆕
+- `triple_ema` — EMA 20/50 cross gated by SMA200 trend filter 🆕
+
+> 🆕 strategies require `period='1y'` or `'2y'` so the SMA200 trend filter can complete its warmup.
 
 **Metrics you get:** Win Rate, Total Return, Sharpe Ratio, Calmar Ratio, Max Drawdown, Profit Factor, Expectancy, Best/Worst Trade, vs Buy-and-Hold, with **realistic commission + slippage simulation**.
 
 ```
-Example prompt: "Compare all strategies on BTC-USD for 2 years"
-→ #1 Supertrend: +31.5% | Sharpe: 2.1 | WR: 62%
-→ #2 Bollinger:  +18.3% | Sharpe: 3.4 | WR: 75%
-→ Buy & Hold:    -5.0%
+Example prompt: "Compare all 9 strategies on MSFT for 2 years"
+→ #1 triple_ema:        +15.1% | Sharpe:  0.0 | WR: 100%
+→ #2 keltner_breakout:  +14.3% | Sharpe:  4.7 | WR:  40%
+→ #3 bollinger:         +12.2% | Sharpe:  4.1 | WR:  64%
+→ Buy & Hold:            -2.1%
 ```
 
 ---
@@ -299,13 +320,13 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 
 ---
 
-### 🧠 AI Sentiment & Intelligence *(New in v0.5.0)*
+### 🧠 AI Sentiment & Intelligence
 
 | Tool | Description |
 |------|-------------|
 | `market_sentiment` | Reddit sentiment across finance communities (bullish/bearish score, top posts) |
-| `financial_news` | Live RSS headlines from Reuters, CoinDesk, CoinTelegraph |
-| `combined_analysis` | **Power Tool**: TradingView technicals + Reddit sentiment + live news → confluence decision |
+| `financial_news` | Live RSS headlines from Yahoo Finance, MarketWatch, CNBC, CoinDesk, CoinTelegraph |
+| `combined_analysis` | **Power Tool**: TradingView technicals + Reddit sentiment + live news → confluence decision. Now backed by retry + 60s cache for resilience against transient screener errors. |
 
 ---
 
@@ -348,8 +369,11 @@ AI: [market_sentiment] → Strongly Bullish (0.41) | 23 posts | 18 bullish
 You: "Backtest RSI strategy on BTC-USD for 2 years"
 AI: [backtest_strategy] → +31.5% return | 100% win rate | 2 trades | B&H: -5%
 
-You: "Which strategy worked best on AAPL in the last 2 years?"
-AI: [compare_strategies] → Supertrend #1 (+14.6%, Sharpe 3.09), MACD last (-9.1%)
+You: "Which of the 9 strategies worked best on MSFT in the last 2 years?"
+AI: [compare_strategies] → triple_ema #1 (+15.1%, WR 100%), keltner_breakout #2 (+14.3%), macd last (-23.4%)
+
+You: "Run walk-forward backtest on supertrend for SPY"
+AI: [walk_forward_backtest_strategy] → Verdict: ROBUST (avg robustness 0.92) | OOS return +8.5%
 
 You: "Analyze TSLA with all signals: technical + sentiment + news"
 AI: [combined_analysis] → BUY (Technical STRONG BUY + Bullish Reddit + Positive news)
@@ -380,10 +404,12 @@ Every sponsor directly funds new features like Walk-Forward Backtesting, Twitter
 - [x] TradingView technical analysis (30+ indicators)
 - [x] Multi-exchange screener (Binance, KuCoin, MEXC, EGX, US stocks)
 - [x] Reddit sentiment analysis
-- [x] Live financial news (RSS)
+- [x] Live financial news (Yahoo / MarketWatch / CNBC / CoinDesk / CoinTelegraph)
 - [x] Yahoo Finance real-time prices
-- [x] Backtesting engine (6 strategies + Sharpe/Calmar/Expectancy)
-- [ ] Walk-forward backtesting (overfitting detection)
+- [x] Backtesting engine (9 strategies + Sharpe / Calmar / Expectancy)
+- [x] Walk-forward backtesting (overfitting detection)
+- [x] Resilience layer (retry + TTL cache) on screener provider
+- [x] Hourly (1h) backtesting timeframe
 - [ ] Twitter/X market sentiment
 - [ ] Paper trading simulation
 - [ ] Managed cloud hosting (no local setup)
