@@ -462,6 +462,15 @@ def analyze_coin(
 
         data = analysis[full_symbol]
         indicators = data.indicators
+        # tradingview_ta omits the ATR column from its analysis payload, leaving
+        # downstream consumers (stop-loss sizing, trade quality, volatility
+        # scoring) with a None they can't act on. Pull it from the screener
+        # endpoint as a best-effort augmentation.
+        if indicators.get("ATR") is None:
+            from tradingview_mcp.core.services.screener_provider import fetch_atr_for_ticker
+            atr_value = fetch_atr_for_ticker(full_symbol, screener, timeframe)
+            if atr_value is not None:
+                indicators["ATR"] = atr_value
         metrics = compute_metrics(indicators)
 
         if not metrics:

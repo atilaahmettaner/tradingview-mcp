@@ -218,6 +218,66 @@ def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
     return m.get(tf)
 
 
+def fetch_atr_for_ticker(
+    ticker: str,
+    screener_market: str,
+    timeframe: Optional[str] = None,
+    timeout: float = 10.0,
+) -> Optional[float]:
+    """Fetch ATR(14) for a single ticker via TradingView's scanner endpoint.
+
+    Works around tradingview_ta not exposing the ATR column — coin_analysis,
+    combined_analysis, multi_timeframe_analysis all rely on that library and
+    therefore return atr=null until ATR is injected from the screener payload.
+
+    Args:
+        ticker:           Fully-qualified TradingView symbol (e.g. "BINANCE:BTCUSDT").
+        screener_market:  Scanner market path segment (e.g. "crypto", "america",
+                          "egypt") — the same value passed as `screener` to
+                          tradingview_ta.
+        timeframe:        Optional timeframe (5m, 15m, 1h, 4h, 1D, 1W, 1M). When
+                          omitted the daily ATR is returned.
+
+    Returns the float ATR or None on any failure (network, missing field, etc.).
+    Failures are silent by design so the caller can degrade gracefully.
+    """
+    if not ticker or not screener_market:
+        return None
+    try:
+        import requests  # type: ignore
+    except ImportError:
+        return None
+
+    suffix = _tf_to_tv_resolution(timeframe)
+    col = f"ATR|{suffix}" if suffix else "ATR"
+    url = f"https://scanner.tradingview.com/{screener_market}/scan"
+    payload = {
+        "symbols": {"tickers": [ticker], "query": {"types": []}},
+        "columns": [col],
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        body = resp.json()
+    except Exception:  # noqa: BLE001 — graceful degrade
+        return None
+
+    rows = body.get("data") if isinstance(body, dict) else None
+    if not rows:
+        return None
+    row = rows[0] if isinstance(rows, list) else None
+    if not isinstance(row, dict):
+        return None
+    values = row.get("d") or []
+    if not values:
+        return None
+    raw = values[0]
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def fetch_screener_indicators(
     exchange: str,
     symbols: Optional[List[str]] = None,
