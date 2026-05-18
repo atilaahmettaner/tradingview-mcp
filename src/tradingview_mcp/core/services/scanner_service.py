@@ -3,11 +3,18 @@ Scanner Service — volume breakout and technical pattern scanning logic.
 
 All functions take validated parameters and return plain dicts / lists.
 They have zero dependency on the MCP layer and are independently testable.
+
+Batched scanners raise :class:`BatchExecutionError` when 100% of upstream
+batches fail, so the tool wrapper at the MCP boundary can convert that into a
+structured error envelope. Returning ``[]`` on total failure (the historical
+behavior) hid rate-limit cliffs as "no results today".
 """
 from __future__ import annotations
 
-from typing import List
+import sys
+from typing import List, Optional
 
+from tradingview_mcp.core.errors import BatchExecutionError
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, is_stock_exchange
@@ -53,11 +60,27 @@ def volume_breakout_scan(
     volume_breakouts: List[dict] = []
     batch_size = 100
 
+    batches_attempted = 0
+    batches_failed = 0
+    first_error: Optional[str] = None
+
     for i in range(0, min(len(symbols), 500), batch_size):
         batch = symbols[i : i + batch_size]
+        batches_attempted += 1
         try:
             analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
-        except Exception:
+        except Exception as exc:
+            batches_failed += 1
+            if first_error is None:
+                first_error = repr(exc)
+            try:
+                print(
+                    f"[tradingview_mcp] volume_breakout_scan batch "
+                    f"{i // batch_size + 1} failed: {exc!r}",
+                    file=sys.stderr,
+                )
+            except Exception:
+                pass
             continue
 
         for symbol, data in analysis.items():
@@ -107,6 +130,16 @@ def volume_breakout_scan(
                     )
             except Exception:
                 continue
+
+    # Sentinel: every batch failed means the upstream is unavailable
+    # (rate limit, blocked, outage). Raise so the tool wrapper can return a
+    # typed error envelope instead of an indistinguishable empty list.
+    if batches_attempted > 0 and batches_failed == batches_attempted:
+        raise BatchExecutionError(
+            batches_attempted=batches_attempted,
+            batches_failed=batches_failed,
+            first_error=first_error or "unknown",
+        )
 
     volume_breakouts.sort(
         key=lambda x: (x["volume_strength"], abs(x["changePercent"])),

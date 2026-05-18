@@ -65,6 +65,11 @@ from tradingview_mcp.core.utils.validators import (
     normalize_tradingview_symbol,
     normalize_yahoo_symbol,
 )
+from tradingview_mcp.core.errors import (
+    BatchExecutionError,
+    ErrorCode,
+    make_error,
+)
 
 try:
     import tradingview_screener  # noqa: F401
@@ -90,28 +95,52 @@ mcp = FastMCP(
 # ── Screener tools ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
+def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict] | dict:
     """Return top gainers for an exchange and timeframe using Bollinger Band analysis.
 
     Args:
         exchange: Exchange name — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         limit: Number of rows to return (max 50)
+
+    Returns:
+        list[dict] on success. On total upstream failure returns a structured
+        error envelope: ``{"error": {"code": "ALL_BATCHES_FAILED", ...}}``.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
-    rows = fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
+    try:
+        rows = fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
+    except BatchExecutionError as e:
+        return make_error(
+            ErrorCode.ALL_BATCHES_FAILED, str(e),
+            batches_attempted=e.batches_attempted,
+            batches_failed=e.batches_failed,
+            first_error=e.first_error,
+        )
     return [{"symbol": r["symbol"], "changePercent": r["changePercent"], "indicators": dict(r["indicators"])} for r in rows]
 
 
 @mcp.tool()
-def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
-    """Return top losers for an exchange and timeframe. Supports crypto (KUCOIN, BINANCE, MEXC) and stocks (EGX, BIST, NASDAQ)."""
+def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict] | dict:
+    """Return top losers for an exchange and timeframe. Supports crypto (KUCOIN, BINANCE, MEXC) and stocks (EGX, BIST, NASDAQ).
+
+    Returns ``list[dict]`` on success, or an error envelope on total upstream
+    failure (``{"error": {"code": "ALL_BATCHES_FAILED", ...}}``).
+    """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
-    rows = fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
+    try:
+        rows = fetch_trending_analysis(exchange, timeframe=timeframe, limit=limit)
+    except BatchExecutionError as e:
+        return make_error(
+            ErrorCode.ALL_BATCHES_FAILED, str(e),
+            batches_attempted=e.batches_attempted,
+            batches_failed=e.batches_failed,
+            first_error=e.first_error,
+        )
     rows.sort(key=lambda x: x["changePercent"])
     return [{"symbol": r["symbol"], "changePercent": r["changePercent"], "indicators": dict(r["indicators"])} for r in rows[:limit]]
 
@@ -134,7 +163,7 @@ def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshol
 
 
 @mcp.tool()
-def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int = 2, limit: int = 25) -> list[dict]:
+def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int = 2, limit: int = 25) -> list[dict] | dict:
     """Filter coins by Bollinger Band rating.
 
     Args:
@@ -142,12 +171,23 @@ def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int =
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         rating: BB rating (-3 to +3): -3=Strong Sell, -2=Sell, -1=Weak Sell, 1=Weak Buy, 2=Buy, 3=Strong Buy
         limit: Number of rows to return (max 50)
+
+    Returns ``list[dict]`` on success, or an error envelope on total upstream
+    failure (``{"error": {"code": "ALL_BATCHES_FAILED", ...}}``).
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "5m")
     rating = max(-3, min(3, rating))
     limit = max(1, min(limit, 50))
-    rows = fetch_trending_analysis(exchange, timeframe=timeframe, filter_type="rating", rating_filter=rating, limit=limit)
+    try:
+        rows = fetch_trending_analysis(exchange, timeframe=timeframe, filter_type="rating", rating_filter=rating, limit=limit)
+    except BatchExecutionError as e:
+        return make_error(
+            ErrorCode.ALL_BATCHES_FAILED, str(e),
+            batches_attempted=e.batches_attempted,
+            batches_failed=e.batches_failed,
+            first_error=e.first_error,
+        )
     return [{"symbol": r["symbol"], "changePercent": r["changePercent"], "indicators": dict(r["indicators"])} for r in rows]
 
 
@@ -254,7 +294,7 @@ def volume_breakout_scanner(
     volume_multiplier: float = 2.0,
     price_change_min: float = 3.0,
     limit: int = 25,
-) -> list[dict]:
+) -> list[dict] | dict:
     """Detect coins with volume breakout + price breakout.
 
     Args:
@@ -263,13 +303,26 @@ def volume_breakout_scanner(
         volume_multiplier: How many times the volume should be above normal level (default 2.0)
         price_change_min: Minimum price change percentage (default 3.0)
         limit: Number of rows to return (max 50)
+
+    Returns ``list[dict]`` on success, or an error envelope on total upstream
+    failure (``{"error": {"code": "ALL_BATCHES_FAILED", ...}}``). The empty
+    list now strictly means "no matches today"; rate-limit cliffs surface
+    explicitly.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     volume_multiplier = max(1.5, min(10.0, volume_multiplier))
     price_change_min = max(1.0, min(20.0, price_change_min))
     limit = max(1, min(limit, 50))
-    return volume_breakout_scan(exchange, timeframe, volume_multiplier, price_change_min, limit)
+    try:
+        return volume_breakout_scan(exchange, timeframe, volume_multiplier, price_change_min, limit)
+    except BatchExecutionError as e:
+        return make_error(
+            ErrorCode.ALL_BATCHES_FAILED, str(e),
+            batches_attempted=e.batches_attempted,
+            batches_failed=e.batches_failed,
+            first_error=e.first_error,
+        )
 
 
 @mcp.tool()
@@ -293,7 +346,7 @@ def smart_volume_scanner(
     min_price_change: float = 2.0,
     rsi_range: str = "any",
     limit: int = 20,
-) -> list[dict]:
+) -> list[dict] | dict:
     """Smart volume + technical analysis combination scanner.
 
     Args:
@@ -302,12 +355,24 @@ def smart_volume_scanner(
         min_price_change: Minimum price change percentage (default 2.0)
         rsi_range: "oversold" (<30), "overbought" (>70), "neutral" (30-70), "any"
         limit: Number of results (max 30)
+
+    Returns ``list[dict]`` on success, or an error envelope on total upstream
+    failure (``{"error": {"code": "ALL_BATCHES_FAILED", ...}}``) — inherited
+    from the inner ``volume_breakout_scan`` call.
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     min_volume_ratio = max(1.2, min(10.0, min_volume_ratio))
     min_price_change = max(0.5, min(20.0, min_price_change))
     limit = max(1, min(limit, 30))
-    return smart_volume_scan(exchange, min_volume_ratio, min_price_change, rsi_range, limit)
+    try:
+        return smart_volume_scan(exchange, min_volume_ratio, min_price_change, rsi_range, limit)
+    except BatchExecutionError as e:
+        return make_error(
+            ErrorCode.ALL_BATCHES_FAILED, str(e),
+            batches_attempted=e.batches_attempted,
+            batches_failed=e.batches_failed,
+            first_error=e.first_error,
+        )
 
 
 # ── Multi-agent analysis ───────────────────────────────────────────────────────
