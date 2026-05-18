@@ -7,7 +7,7 @@ Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![MCP Ready](https://img.shields.io/badge/MCP-Ready-brightgreen)](https://modelcontextprotocol.com/)
+[![MCP Ready](https://img.shields.io/badge/MCP-Ready-brightgreen)](https://modelcontextprotocol.io/)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-blueviolet)](https://openclaw.ai)
 [![Version](https://img.shields.io/badge/version-v0.7.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
 [![PyPI](https://img.shields.io/badge/PyPI-tradingview--mcp--server-orange)](https://pypi.org/project/tradingview-mcp-server/)
@@ -241,6 +241,16 @@ market snapshot
 backtest RSI strategy for AAPL, 1 year
 compare all strategies for BTC-USD
 ```
+
+### Optional: X/Twitter Market Context
+
+If your OpenClaw trading bot also needs public X/Twitter chatter around tickers, install [TweetClaw](https://github.com/Xquik-dev/tweetclaw) as a companion plugin:
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Use `tradingview-mcp` for prices, indicators, backtests, Reddit sentiment, and RSS news. Use TweetClaw when a prompt asks to scrape tweets, search tweets, search tweet replies, export followers, look up users, monitor tweets, deliver webhooks, run giveaway draws, or post tweets and replies after explicit user approval. The canonical package is [`@xquik/tweetclaw`](https://www.npmjs.com/package/@xquik/tweetclaw); live calls require a Xquik API key from [dashboard.xquik.com](https://dashboard.xquik.com/).
 
 👉 **[Full OpenClaw Setup Guide →](OPENCLAW.md)**
 
