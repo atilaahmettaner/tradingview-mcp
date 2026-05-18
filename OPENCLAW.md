@@ -173,6 +173,20 @@ Your OpenClaw agent will have access to all tradingview tools via the wrapper:
 - `analyze_sentiment` — Reddit sentiment for any ticker
 - `fetch_news_summary` — Latest news from financial RSS feeds
 
+### Optional Companion: X/Twitter Market Context
+
+Install [TweetClaw](https://github.com/Xquik-dev/tweetclaw) when the same OpenClaw agent needs public X/Twitter signals alongside `tradingview-mcp` data:
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Keep responsibilities split:
+- `tradingview-mcp`: prices, screeners, indicators, backtests, Reddit sentiment, and RSS news
+- TweetClaw: scrape tweets, search tweets, search tweet replies, follower export, user lookup, media upload/download, direct messages, monitors, webhooks, giveaway draws, and approval-reviewed post tweets or replies through Xquik
+
+The canonical package is [`@xquik/tweetclaw`](https://www.npmjs.com/package/@xquik/tweetclaw). Live calls require a Xquik API key from [dashboard.xquik.com](https://dashboard.xquik.com/), but the plugin can install before credentials are configured.
+
 ### Screener
 - `screener_bullish`, `screener_oversold`, `screener_strong_trend` — TradingView screener
 - `egx_stock_screen` — Egyptian Exchange specific screening
