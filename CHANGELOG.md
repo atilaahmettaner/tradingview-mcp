@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **`coin_analysis` ATR null bug**: `tradingview_ta` omits the `ATR` column from
+  its analysis payload, which left `indicators["ATR"]` (and every downstream
+  consumer — stop-loss sizing, trade-quality score, volatility metrics) at
+  `None` on every call. `analyze_coin` now falls back to a direct
+  `scanner.tradingview.com/<market>/scan` request via the new
+  `fetch_atr_for_ticker()` helper in `screener_provider.py`. The lookup is
+  best-effort (silent `None` on any network / parse failure) and only fires
+  when `tradingview_ta` returned no ATR, so it does not regress healthy
+  payloads. Timeframe → resolution mapping is shared with the existing
+  screener column logic (`5m→5`, `15m→15`, `1h→60`, `4h→240`, `1D/1W/1M`
+  unchanged); unknown timeframes degrade to the unsuffixed `ATR` column.
+
+### Changed
+- `requests` is now an explicit dependency in `pyproject.toml`. It was already
+  pulled in transitively by `tradingview-screener` / `tradingview-ta`, but the
+  new ATR injection path uses it directly, so it is no longer safe to rely on
+  the transitive resolution.
+
 ## [0.7.1] - 2026-04-14
 
 ### Added

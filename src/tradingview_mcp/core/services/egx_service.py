@@ -617,11 +617,25 @@ def analyze_egx_index(index: str = "EGX30", timeframe: str = "1D", limit: int = 
         except Exception:
             continue
 
+        # tradingview_ta does not expose the ATR column, so atr_volatility and any
+        # downstream ATR-based scoring collapses to None. One scanner POST per
+        # batch backfills it for every symbol that came back with ATR missing.
+        present_tickers = [sym for sym, data in analysis.items() if data is not None]
+        if present_tickers:
+            from tradingview_mcp.core.services.screener_provider import fetch_atr_for_tickers
+            atr_map = fetch_atr_for_tickers(present_tickers, screener, timeframe)
+        else:
+            atr_map = {}
+
         for sym, data in analysis.items():
             if data is None:
                 continue
             try:
                 ind = data.indicators
+                if ind.get("ATR") is None:
+                    backfilled = atr_map.get(sym)
+                    if backfilled is not None:
+                        ind["ATR"] = backfilled
                 metrics = compute_metrics(ind)
                 if not metrics:
                     continue
@@ -895,6 +909,13 @@ def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
         return {"error": f"No data found for {full_symbol}"}
 
     ind = analysis[full_symbol].indicators
+    # Backfill ATR before compute_trade_setup (stop-loss = close - 1.5*atr)
+    # and compute_stock_score (10pt ATR% band) and extract_extended_indicators.
+    if ind.get("ATR") is None:
+        from tradingview_mcp.core.services.screener_provider import fetch_atr_for_ticker
+        atr_value = fetch_atr_for_ticker(full_symbol, screener, timeframe)
+        if atr_value is not None:
+            ind["ATR"] = atr_value
     metrics = compute_metrics(ind)
     if not metrics:
         return {"error": f"Could not compute metrics for {full_symbol}"}
@@ -1039,6 +1060,12 @@ def analyze_egx_fibonacci(
         return {"error": f"No data found for {full_symbol}"}
 
     ind = analysis[full_symbol].indicators
+    # Backfill ATR (used downstream in the context block — `atr_val = ind.get("ATR")`).
+    if ind.get("ATR") is None:
+        from tradingview_mcp.core.services.screener_provider import fetch_atr_for_ticker
+        atr_value = fetch_atr_for_ticker(full_symbol, screener, timeframe)
+        if atr_value is not None:
+            ind["ATR"] = atr_value
     close = ind.get("close")
     if not close:
         return {"error": f"No price data for {full_symbol}"}

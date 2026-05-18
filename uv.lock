@@ -1012,6 +1012,7 @@ source = { editable = "." }
 dependencies = [
     { name = "feedparser" },
     { name = "mcp", extra = ["cli"] },
+    { name = "requests" },
     { name = "tradingview-screener" },
     { name = "tradingview-ta" },
 ]
@@ -1025,6 +1026,7 @@ dev = [
 requires-dist = [
     { name = "feedparser", specifier = ">=6.0.12" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.12.0" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "tradingview-screener", specifier = ">=0.6.4" },
     { name = "tradingview-ta", specifier = ">=3.3.0" },
 ]

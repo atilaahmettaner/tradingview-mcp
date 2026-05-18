@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
   "feedparser>=6.0.12",
   "mcp[cli]>=1.12.0",
+  "requests>=2.32",
   "tradingview-screener>=0.6.4",
   "tradingview-ta>=3.3.0",
 ]
