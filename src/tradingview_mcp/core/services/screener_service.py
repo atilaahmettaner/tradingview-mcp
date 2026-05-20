@@ -23,6 +23,9 @@ from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type
 
+# Resilience layer (does not require tradingview_ta; safe to import unconditionally).
+from tradingview_mcp.core.services.screener_provider import _scan_with_retry
+
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
     import tradingview_ta  # noqa: F401  presence check
@@ -271,7 +274,15 @@ def fetch_multi_changes(
     if limit:
         q = q.limit(int(limit))
 
-    _total, df = q.get_scanner_data(cookies=cookies)
+    # Route through resilience layer (retry + stale-while-error).
+    mc_cache_key = (
+        "screener_multichanges_v1",
+        (exchange or "").upper(),
+        tuple(sorted(suffix_map.keys())),
+        base_timeframe,
+        int(limit) if limit else None,
+    )
+    _total, df = _scan_with_retry(q, cookies=cookies, cache_key=mc_cache_key)
     if df is None or df.empty:
         return []
 
@@ -412,7 +423,14 @@ def fetch_multi_timeframe_patterns(
         q = q.where(Column("exchange") == exchange.upper())
         q = q.limit(len(symbols))
 
-        _total, df = q.get_scanner_data()
+        # Route through resilience layer (retry + stale-while-error).
+        cp_cache_key = (
+            "screener_candle_pattern_v1",
+            exchange.upper(),
+            tv_interval,
+            tuple(sorted(symbols)),
+        )
+        _total, df = _scan_with_retry(q, cache_key=cp_cache_key)
         if df is None or df.empty:
             return []
 

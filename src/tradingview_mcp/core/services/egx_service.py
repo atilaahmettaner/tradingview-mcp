@@ -24,6 +24,9 @@ from tradingview_mcp.core.services.indicators import (
 )
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, sanitize_timeframe
 
+# Resilience layer (no tradingview_ta dependency; safe to import unconditionally).
+from tradingview_mcp.core.services.screener_provider import _scan_with_retry
+
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
     import tradingview_ta  # noqa: F401  presence check
@@ -1039,7 +1042,11 @@ def analyze_egx_fibonacci(
                 .select("close", high_col, low_col)
                 .set_tickers([full_symbol])
             )
-            _, df = q.get_scanner_data()
+            # Route through resilience layer (retry + stale-while-error).
+            # Cache key scoped to egx_fib_swing so it doesn't collide with
+            # other screener queries on the same ticker.
+            fib_cache_key = ("egx_fib_swing_v1", full_symbol, lookback)
+            _, df = _scan_with_retry(q, cache_key=fib_cache_key)
             if not df.empty:
                 row = df.iloc[0]
                 h = row.get(high_col)
