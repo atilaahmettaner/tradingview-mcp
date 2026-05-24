@@ -22,6 +22,7 @@ STOCK_EXCHANGES: Set[str] = {
     "asx",
     "sse", "szse", "chn",
     "twse", "tpex",
+    "tadawul", "tasi",                  # Saudi Stock Exchange (Tadawul) — All Share Index (TASI)
 }
 
 EXCHANGE_SCREENER = {
@@ -63,6 +64,9 @@ EXCHANGE_SCREENER = {
     # Taiwan Stock Market Support
     "twse": "taiwan",       # Taiwan Stock Exchange (臺灣證券交易所)
     "tpex": "taiwan",       # Taipei Exchange (櫃買中心, OTC market)
+    # Saudi Stock Market (Tadawul) — TradingView scanner uses /ksa/
+    "tadawul": "ksa",
+    "tasi": "ksa",          # alias: Tadawul All Share Index
 }
 
 # Map validated exchange identifiers to their canonical TradingView symbol prefix.
@@ -90,6 +94,8 @@ _EXCHANGE_TV_PREFIX: dict = {
     "chn": "SSE",
     "twse": "TWSE",
     "tpex": "TPEX",
+    "tadawul": "TADAWUL",
+    "tasi": "TADAWUL",
 }
 
 _YAHOO_SYMBOL_ALIASES: dict = {
