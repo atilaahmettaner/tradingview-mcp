@@ -3,12 +3,12 @@
 <a href="https://trendshift.io/repositories/25110" target="_blank"><img src="https://trendshift.io/api/badge/repositories/25110" alt="atilaahmettaner%2Ftradingview-mcp | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 **TradingView MCP server** — real-time market data, technical indicators, screeners, and backtesting for Claude, ChatGPT, Cursor, Copilot, and any MCP client. Stocks, crypto, forex & futures across global exchanges.
-Backtesting + live sentiment + Yahoo Finance + 37 technical-analysis tools — the most complete TradingView MCP toolkit, all in one server.
+Backtesting + live sentiment + Yahoo Finance + AAOIFI-style stock screening + 39 market-analysis tools — all in one server.
 
-**Don't want to install anything?** The [hosted server](https://pro.cryptosieve.com/?utm_source=github&utm_medium=readme&utm_content=top_cta) gives you all 37 tools as one connector URL for Claude, ChatGPT, Cursor and Copilot. From $9/mo with a 3-day free trial; self-hosting stays free.
+**Don't want to install anything?** The [hosted server](https://pro.cryptosieve.com/?utm_source=github&utm_medium=readme&utm_content=top_cta) gives you all 39 tools as one connector URL for Claude, ChatGPT, Cursor and Copilot. From $9/mo with a 3-day free trial; self-hosting stays free.
 
 <p align="center">
-  <img src=".github/assets/tradingview-mcp-demo.gif" width="820" alt="TradingView MCP in an AI chat: ask for the top gainers on Binance and get ranked, real-time results — one of 37 tools" />
+  <img src=".github/assets/tradingview-mcp-demo.gif" width="820" alt="TradingView MCP in an AI chat: ask for the top gainers on Binance and get ranked, real-time results — one of 39 tools" />
 </p>
 
 **🆕 The [hosted server](https://pro.cryptosieve.com/?utm_source=github&utm_medium=readme&utm_content=charts) now draws.** Ask for a chart and an interactive candlestick view (1d / 1h / 15m, optional Bollinger overlay) renders live **inside the conversation** via MCP Apps — and the AI reads the band values back to you:
@@ -52,7 +52,7 @@ Backtest an RSI strategy on BTC on the daily timeframe
 | What you need | Nothing — public market data | TradingView Desktop, usually with a paid TradingView plan |
 | Where it works | Claude.ai, Claude Code, ChatGPT, Cursor, Copilot — any MCP client | Mostly Claude Code, on your own machine |
 | When your machine is off | Hosted version keeps answering, 24/7 | Stops |
-| Screeners & backtesting | Built in (37 tools, multi-exchange) | Whatever the TradingView UI offers |
+| Screeners & backtesting | Built in (39 tools, multi-exchange) | Whatever the TradingView UI offers |
 | Charts | Interactive in-conversation charts (MCP Apps, hosted) | TradingView's own charts |
 | Your TradingView account | Not needed, never touched | Drives your logged-in session |
 
@@ -64,7 +64,7 @@ If you want an AI clicking around *your* TradingView Desktop — editing Pine Sc
 > **Not financial advice.** Nothing produced by this software is investment, financial, legal, tax, or accounting advice. tradingview-mcp is an informational and educational analysis tool. Its outputs, including indicators, scores, signals, "trade setups", entries, stop losses, and targets, are computed from third party market data and are **not** recommendations to buy, sell, or hold any asset. It does not execute trades, manage money, or guarantee any result. Trading and investing carry a substantial risk of loss, and you can lose some or all of your capital. Always do your own research and consult a licensed professional before making any financial decision. You are solely responsible for your own decisions and for complying with the laws and regulations that apply to you. Market data may be delayed, inaccurate, or incomplete, and is provided without warranty.
 
 > [!TIP]
-> **Prefer zero setup? Use the hosted version.** [**pro.cryptosieve.com**](https://pro.cryptosieve.com/?utm_source=github&utm_medium=readme&utm_content=tip) serves all 37 tools as one connector URL for Claude.ai, ChatGPT, Copilot, and Cursor — no `uv`, `pandas`, or Python to wrangle. **From $9/mo (Pro) or $29/mo (Pro+ — higher limits), with a 3-day free trial.** Self-hosting stays free forever; hosted is just for folks who'd rather skip the ops. *(Full self-host vs hosted comparison in Quick Start below.)*
+> **Prefer zero setup? Use the hosted version.** [**pro.cryptosieve.com**](https://pro.cryptosieve.com/?utm_source=github&utm_medium=readme&utm_content=tip) serves all 39 tools as one connector URL for Claude.ai, ChatGPT, Copilot, and Cursor — no `uv`, `pandas`, or Python to wrangle. **From $9/mo (Pro) or $29/mo (Pro+ — higher limits), with a 3-day free trial.** Self-hosting stays free forever; hosted is just for folks who'd rather skip the ops. *(Full self-host vs hosted comparison in Quick Start below.)*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/downloads/)
@@ -124,6 +124,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 | **Backtesting** | ✅ 9 strategies + Walk-forward + Sharpe | ❌ Manual scripting | ✅ Proprietary |
 | **Live Sentiment** | ✅ Reddit + RSS news | ❌ Separate setup | ✅ Terminal |
 | **Market Data** | ✅ Live / Real-Time | Historical / Delayed | Live |
+| **AAOIFI-style stock screening** | ✅ Informational business/ratio screen | ❌ Not available | ❌ Not available |
 | **API Keys** | **None required** | Multiple (OpenAI, etc.) | N/A |
 
 ---
@@ -135,7 +136,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 
 ## 🚀 Quick Start (5 Minutes)
 
-**Two ways to run it — the same 37 tools either way:**
+**Two ways to run it — the same 39 tools either way:**
 
 | | 🧑‍💻 Self-host (this repo) | ☁️ Hosted — [pro.cryptosieve.com](https://pro.cryptosieve.com) |
 |---|---|---|
@@ -394,9 +395,29 @@ Unlike basic screeners, this framework deploys **specialized AI agents** that de
 
 *Output: `STRONG BUY` / `BUY` / `HOLD` / `SELL` / `STRONG SELL` with confidence score*
 
+AAOIFI-style stock screening is available separately through the two tools below; it is not an AI-agent opinion or a religious ruling.
+
 ---
 
-## 🔧 All 37 MCP Tools
+## 🔧 All 39 MCP Tools
+
+### 🕌 AAOIFI-Style Stock Screening
+
+| Tool | Description |
+|------|-------------|
+| `check_shariah_compliance` | Informational business-activity and financial-ratio screen for one stock, including a purification estimate when data is available |
+| `check_shariah_compliance_bulk` | Apply the same screen to up to 20 comma-separated tickers, with summary counts and individual reports |
+
+These tools use Yahoo Finance public JSON endpoints and apply AAOIFI Standard No. 21-style checks. Results are automated, ratio-based screening outputs—not a fatwa or religious ruling:
+
+- Qualitative screen for prohibited business activities such as conventional banking, insurance, alcohol, tobacco, gambling, adult entertainment, and weapons.
+- Quantitative screen requiring total debt, cash plus securities, and accounts receivable to each stay below 30% of market capitalization.
+- Purification rate calculated as interest income divided by total revenue when that data is available.
+
+```
+Example prompt: "Is Apple halal to invest in?"
+→ AAOIFI-style screen: HALAL with purification | Debt 16.7% | Cash 6.7% | Receivables 3.3%
+```
 
 ### 📊 Backtesting Engine
 
@@ -508,6 +529,13 @@ AI: [walk_forward_backtest_strategy] → Verdict: ROBUST (avg robustness 0.92) |
 
 You: "Analyze TSLA with all signals: technical + sentiment + news"
 AI: [combined_analysis] → BUY (Technical STRONG BUY + Bullish Reddit + Positive news)
+
+You: “Is Apple halal to invest in?”
+AI: [check_shariah_compliance] → AAOIFI-style informational screen: HALAL (with purification 0.42%)
+Debt 18.3% | Cash 4.1% | Receivables 2.9%
+
+You: "Are AAPL, MSFT, and JPM Shariah compliant?"
+AI: [check_shariah_compliance_bulk] → Informational screen: 2 halal, 1 haram, with AAOIFI-style ratio details
 ```
 
 ---
