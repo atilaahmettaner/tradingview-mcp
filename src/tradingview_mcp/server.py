@@ -48,6 +48,10 @@ from tradingview_mcp.core.services.yahoo_finance_service import (
     get_price,
     get_market_snapshot,
 )
+from tradingview_mcp.core.services.shariah_service import (
+    screen_shariah,
+    screen_shariah_bulk,
+)
 from tradingview_mcp.core.services.bitcoin_market_service import get_bitcoin_market_pulse
 from tradingview_mcp.core.services.extended_hours_service import get_extended_hours_price
 from tradingview_mcp.core.services.options_service import (
@@ -82,7 +86,7 @@ mcp = FastMCP(
         "Supports crypto exchanges (KuCoin, Binance, Bybit, MEXC, etc.) and stock markets "
         "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
-        "volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
+        "volume_breakout_scanner, shariah_compliance, egx_market_overview, egx_sector_scan, and more."
     ),
 )
 
@@ -626,6 +630,38 @@ def market_snapshot() -> dict:
     Powered by Yahoo Finance.
     """
     return get_market_snapshot()
+
+
+@mcp.tool()
+def check_shariah_compliance(symbol: str) -> dict:
+    """Screen a single stock for Shariah compliance using AAOIFI Standard No. 21.
+
+    Args:
+        symbol: Yahoo Finance stock ticker, such as AAPL, MSFT, THYAO.IS, or 2222.SR
+
+    Returns:
+        Full compliance report with qualitative screen, financial ratios,
+        purification rate, warnings, and informational disclaimer.
+    """
+    return screen_shariah(normalize_yahoo_symbol(symbol))
+
+
+@mcp.tool()
+def check_shariah_compliance_bulk(symbols: str) -> dict:
+    """Screen up to 20 stocks for Shariah compliance using AAOIFI Standard No. 21.
+
+    Args:
+        symbols: Comma-separated Yahoo Finance tickers, such as AAPL,MSFT,JPM,TSLA
+
+    Returns:
+        Summary counts and one compliance report per symbol.
+    """
+    symbol_list = [
+        normalize_yahoo_symbol(symbol)
+        for symbol in symbols.split(",")
+        if symbol.strip()
+    ]
+    return screen_shariah_bulk(symbol_list)
 
 
 @mcp.tool()

@@ -3,7 +3,7 @@
 <a href="https://trendshift.io/repositories/25110" target="_blank"><img src="https://trendshift.io/api/badge/repositories/25110" alt="atilaahmettaner%2Ftradingview-mcp | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 **The most complete AI-powered trading toolkit for Claude and MCP clients.**
-Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — all in one MCP server.
+Backtesting + Live Sentiment + Yahoo Finance + Shariah Compliance + 30+ Technical Analysis Tools — all in one MCP server.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -53,6 +53,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 | **Backtesting** | ✅ 6 strategies + Sharpe | ❌ Manual scripting | ✅ Proprietary |
 | **Live Sentiment** | ✅ Reddit + RSS news | ❌ Separate setup | ✅ Terminal |
 | **Market Data** | ✅ Live / Real-Time | Historical / Delayed | Live |
+| **Shariah Screening** | ✅ AAOIFI Standard No. 21 | ❌ Not available | ❌ Not available |
 | **API Keys** | **None required** | Multiple (OpenAI, etc.) | N/A |
 
 ---
@@ -255,12 +256,31 @@ Unlike basic screeners, this framework deploys **specialized AI agents** that de
 1. **🛠️ Technical Analyst** — Bollinger Bands (±3 proprietary rating), RSI, MACD
 2. **🌊 Sentiment & Momentum Analyst** — Reddit community sentiment + price momentum
 3. **🛡️ Risk Manager** — Volatility, drawdown risk, mean-reversion signals
+4. **🕌 Shariah Advisor** — AAOIFI Standard No. 21 compliance + purification rate
 
 *Output: `STRONG BUY` / `BUY` / `HOLD` / `SELL` / `STRONG SELL` with confidence score*
 
 ---
 
 ## 🔧 All 30+ MCP Tools
+
+### 🕌 Shariah Compliance
+
+| Tool | Description |
+|------|-------------|
+| `check_shariah_compliance` | Full AAOIFI screen for one stock: business activity, debt/cash/receivables ratios, and purification rate |
+| `check_shariah_compliance_bulk` | Screen up to 20 comma-separated tickers with summary counts and individual reports |
+
+The screen uses Yahoo Finance public JSON endpoints and applies AAOIFI Standard No. 21-style checks:
+
+- Qualitative screen for prohibited business activities such as conventional banking, insurance, alcohol, tobacco, gambling, adult entertainment, and weapons.
+- Quantitative screen requiring total debt, cash plus securities, and accounts receivable to each stay below 30% of market capitalization.
+- Purification rate calculated as interest income divided by total revenue when that data is available.
+
+```
+Example prompt: "Is Apple halal to invest in?"
+→ HALAL with purification | Debt 16.7% | Cash 6.7% | Receivables 3.3%
+```
 
 ### 📊 Backtesting Engine *(New in v0.6.0)*
 
@@ -353,6 +373,13 @@ AI: [compare_strategies] → Supertrend #1 (+14.6%, Sharpe 3.09), MACD last (-9.
 
 You: "Analyze TSLA with all signals: technical + sentiment + news"
 AI: [combined_analysis] → BUY (Technical STRONG BUY + Bullish Reddit + Positive news)
+
+You: “Is Apple halal to invest in?”
+AI: [check_shariah_compliance] → HALAL (with purification 0.42%)
+Debt 18.3% | Cash 4.1% | Receivables 2.9%
+
+You: "Are AAPL, MSFT, and JPM Shariah compliant?"
+AI: [check_shariah_compliance_bulk] → 2 halal, 1 haram, with AAOIFI ratio details
 ```
 
 ---
