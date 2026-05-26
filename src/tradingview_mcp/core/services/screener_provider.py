@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple
+from ..utils.cache import MISS as _CACHE_MISS, TTLCache as _TTLCache
 from ..utils.validators import get_market_type
 import json as _json
 import os as _os
@@ -7,7 +8,7 @@ import random as _random
 import socket as _socket
 import sys as _sys
 import time as _time
-from threading import RLock as _RLock, Semaphore as _Semaphore, Lock as _Lock
+from threading import Semaphore as _Semaphore, Lock as _Lock
 
 
 # --- Socket-level timeout (added 2026-05-20) ------------------------------
@@ -326,43 +327,24 @@ def _circuit_record(success: bool) -> None:
         _CIRCUIT_OPEN_UNTIL = 0.0 if success else (_time.time() + _circuit_cooldown_s())
 
 
-_SCREENER_CACHE: Dict[Tuple, Tuple[float, Any]] = {}
-_SCREENER_CACHE_LOCK = _RLock()
+# Shared TTLCache instance for all screener/TA calls. The cache itself is
+# TTL-agnostic; ``_cache_get`` passes the current ``TRADINGVIEW_MCP_CACHE_TTL``
+# on each call so env changes take effect immediately. A fresh-TTL miss does
+# NOT evict the entry — the stale lookup below may still want it.
+_SCREENER_CACHE = _TTLCache()
 
 
 def _cache_get(key: Tuple):
     """Return cached payload if fresh (within TRADINGVIEW_MCP_CACHE_TTL)."""
-    ttl = _cache_ttl_s()
-    if ttl <= 0:
-        return None
-    with _SCREENER_CACHE_LOCK:
-        entry = _SCREENER_CACHE.get(key)
-        if not entry:
-            return None
-        ts, payload = entry
-        if _time.time() - ts > ttl:
-            # Don't pop here — stale lookup below may still want it.
-            return None
-        return payload
+    payload = _SCREENER_CACHE.get(key, _cache_ttl_s())
+    return None if payload is _CACHE_MISS else payload
 
 
 def _cache_get_stale(key: Tuple) -> Optional[Tuple[float, Any]]:
     """Return (age_seconds, payload) if a stale-but-usable entry exists
     (older than fresh TTL, younger than stale TTL). Used as last-resort
     fallback when fresh upstream fetch fails persistently."""
-    stale_ttl = _stale_ttl_s()
-    if stale_ttl <= 0:
-        return None
-    with _SCREENER_CACHE_LOCK:
-        entry = _SCREENER_CACHE.get(key)
-        if not entry:
-            return None
-        ts, payload = entry
-        age = _time.time() - ts
-        if age > stale_ttl:
-            _SCREENER_CACHE.pop(key, None)
-            return None
-        return (age, payload)
+    return _SCREENER_CACHE.get_with_age(key, _stale_ttl_s())
 
 
 def _cache_set(key: Tuple, payload: Any) -> None:
@@ -372,8 +354,7 @@ def _cache_set(key: Tuple, payload: Any) -> None:
     fresh_ttl = _cache_ttl_s()
     if stale_ttl <= 0 and fresh_ttl <= 0:
         return
-    with _SCREENER_CACHE_LOCK:
-        _SCREENER_CACHE[key] = (_time.time(), payload)
+    _SCREENER_CACHE.set(key, payload)
 
 
 # --- Throttle for tradingview_ta calls (added 2026-05-15) -----------------

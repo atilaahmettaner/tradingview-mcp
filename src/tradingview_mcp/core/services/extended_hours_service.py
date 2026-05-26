@@ -29,9 +29,15 @@ import urllib.request
 import urllib.error
 from typing import Optional
 
+from tradingview_mcp.core.utils.cache import cached
+
 _TIMEOUT = 12
 _UA = "tradingview-mcp/0.8.1"
 _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
+
+
+def _is_error_result(r: object) -> bool:
+    return isinstance(r, dict) and "error" in r
 
 
 def _change_pct(price: Optional[float], reference: Optional[float]) -> Optional[float]:
@@ -47,6 +53,12 @@ def _fmt_time(ts: Optional[int]) -> Optional[str]:
     return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(ts))
 
 
+@cached(
+    key_fn=lambda symbol: symbol.upper(),
+    ttl_env="CACHE_TTL_EXTENDED_HOURS",
+    default_ttl=30.0,
+    cache_unless=_is_error_result,
+)
 def get_extended_hours_price(symbol: str) -> dict:
     """Fetch latest pre-market, regular-session, and post-market prices.
 

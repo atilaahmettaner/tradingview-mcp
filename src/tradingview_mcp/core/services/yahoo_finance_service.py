@@ -20,10 +20,16 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from tradingview_mcp.core.services.proxy_manager import build_opener_with_proxy
+from tradingview_mcp.core.utils.cache import cached
 
 _TIMEOUT = 12
 _UA = "tradingview-mcp/0.5.0"
 _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
+
+
+def _is_error_result(r: object) -> bool:
+    """Predicate: skip caching when Yahoo returned an error envelope."""
+    return isinstance(r, dict) and "error" in r
 
 
 def _fetch_quote(symbol: str) -> dict:
@@ -59,6 +65,12 @@ def _get_previous_close(chart_result: dict) -> Optional[float]:
     return meta.get("previousClose") or meta.get("chartPreviousClose")
 
 
+@cached(
+    key_fn=lambda symbol: symbol.upper(),
+    ttl_env="CACHE_TTL_YAHOO_PRICE",
+    default_ttl=30.0,
+    cache_unless=_is_error_result,
+)
 def get_price(symbol: str) -> dict:
     """
     Get real-time price data for any Yahoo Finance symbol.

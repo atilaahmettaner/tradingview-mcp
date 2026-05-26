@@ -38,11 +38,17 @@ import urllib.request
 import urllib.error
 from typing import Optional, List, Dict, Any
 
+from tradingview_mcp.core.utils.cache import cached
+
 _TIMEOUT = 12
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+
+def _is_error_result(r: object) -> bool:
+    return isinstance(r, dict) and "error" in r
 # Yahoo started gating /v7/finance/options behind a crumb+cookie session
 # in 2024 (same as the quoteSummary endpoint). Without auth: HTTP 401.
 # We open a session against fc.yahoo.com to drop cookies, then ask
@@ -161,6 +167,12 @@ def _normalize_contract(c: Dict[str, Any], side: str) -> Dict[str, Any]:
 # ── Tool 1: get_options_chain ───────────────────────────────────────────────
 
 
+@cached(
+    key_fn=lambda symbol, expiry=None: (symbol.strip().upper(), expiry or ""),
+    ttl_env="CACHE_TTL_OPTIONS_CHAIN",
+    default_ttl=60.0,
+    cache_unless=_is_error_result,
+)
 def get_options_chain(symbol: str, expiry: Optional[str] = None) -> dict:
     """Fetch options chain (calls + puts) for one symbol and one expiry.
 
@@ -249,6 +261,17 @@ def get_options_chain(symbol: str, expiry: Optional[str] = None) -> dict:
 # ── Tool 2: get_unusual_options_activity ────────────────────────────────────
 
 
+@cached(
+    key_fn=lambda symbol, top_n=10, min_volume=100, expiries=4: (
+        symbol.strip().upper(),
+        int(top_n),
+        int(min_volume),
+        int(expiries),
+    ),
+    ttl_env="CACHE_TTL_OPTIONS_UNUSUAL",
+    default_ttl=60.0,
+    cache_unless=_is_error_result,
+)
 def get_unusual_options_activity(
     symbol: str,
     top_n: int = 10,

@@ -20,11 +20,19 @@ from tradingview_mcp.core.services import screener_provider as sp
 @pytest.fixture(autouse=True)
 def _reset_state():
     """Clear cache + last-failure timestamp between tests."""
-    with sp._SCREENER_CACHE_LOCK:
-        sp._SCREENER_CACHE.clear()
+    sp._SCREENER_CACHE.clear()
     with sp._TA_FAILURE_LOCK:
         sp._LAST_TA_FAILURE_TS = 0.0
     yield
+
+
+def _backdate_cache_entry(cache_key, seconds: float) -> None:
+    """Shift an entry's stored timestamp into the past so the fresh window
+    misses but the stale window still hits."""
+    cache = sp._SCREENER_CACHE
+    with cache._lock:
+        ts, payload = cache._store[cache_key]
+        cache._store[cache_key] = (ts - seconds, payload)
 
 
 @pytest.fixture
@@ -105,9 +113,7 @@ def test_stale_while_error_returns_cached_payload(fast_retry):
 
     # Force the freshness window to be already expired so _cache_get misses,
     # but stale lookup still hits.
-    with sp._SCREENER_CACHE_LOCK:
-        ts, payload = sp._SCREENER_CACHE[cache_key]
-        sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)  # 2 min old
+    _backdate_cache_entry(cache_key, 120.0)  # 2 min old
 
     class FakeQuery:
         def get_scanner_data(self, cookies=None, proxies=None):
@@ -195,9 +201,7 @@ def test_resilient_ta_returns_stale_on_persistent_failure(fast_retry, monkeypatc
     # Manually expire the FRESH window so the next call must re-fetch,
     # but stale window still holds.
     cache_key = ("ta_multi_v1", "egypt", "1D", ("EGX:ASCM",))
-    with sp._SCREENER_CACHE_LOCK:
-        ts, payload = sp._SCREENER_CACHE[cache_key]
-        sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)
+    _backdate_cache_entry(cache_key, 120.0)
 
     # Upstream now broken; stale fallback should kick in
     result = sp.resilient_get_multiple_analysis("egypt", "1D", ["EGX:ASCM"])
