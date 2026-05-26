@@ -71,6 +71,16 @@ def get_proxy() -> Optional[dict]:
     return {"http": url, "https": url}
 
 
+def get_httpx_proxy() -> Optional[str]:
+    """Return a single proxy URL string for ``httpx.AsyncClient(proxy=...)``.
+
+    Returns None if not configured. httpx (0.27+) accepts a single ``proxy``
+    arg that applies to both http and https, which matches how this repo
+    has always treated the Webshare proxy.
+    """
+    return get_proxy_url()
+
+
 def build_opener_with_proxy(
     user_agent: str = "tradingview-mcp/0.5.0",
 ) -> urllib.request.OpenerDirector:
