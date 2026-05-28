@@ -31,9 +31,9 @@ def compute_bb_rating_signal(close: float, bb_upper: float, bb_middle: float, bb
         rating = -1
 
     signal = "NEUTRAL"
-    if rating == 2:
+    if rating >= 2:
         signal = "BUY"
-    elif rating == -2:
+    elif rating <= -2:
         signal = "SELL"
     return rating, signal
 
