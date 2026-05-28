@@ -39,6 +39,12 @@ pytestmark = pytest.mark.stress
 SINGLE_SYMBOL_CEILING_S = 30.0
 MULTI_TF_CEILING_S = 60.0
 BATCHED_SCAN_CEILING_S = 90.0
+# combined_analysis fans 3 sub-calls in parallel (TA + Reddit + RSS). Pre-P4
+# this was 3 sequential sync calls, so the ceiling was effectively the sum.
+# Post-P4 it's bounded by the slowest single sub-call. We pick a ceiling that
+# fails if any of them blocks the gather (e.g. someone reverts to sequential
+# `await` or removes the to_thread offload).
+COMBINED_CEILING_S = 45.0
 
 
 def _is_error_envelope(result) -> bool:
@@ -181,6 +187,95 @@ async def test_multi_timeframe_analysis_returns_within_ceiling(monkeypatch):
     # Must include timeframes block even when partial — proves the response
     # shape stays intact regardless of upstream health.
     assert "timeframes" in result or "error" in result
+
+
+# ---------------------------------------------------------------------------
+# combined_analysis — the power tool with parallel sub-fan-out
+# ---------------------------------------------------------------------------
+
+
+async def test_combined_analysis_returns_within_ceiling(monkeypatch):
+    """combined_analysis fans TA + Reddit + RSS into ``asyncio.gather``. The
+    whole call must finish in roughly the time of the slowest single sub-call,
+    not the sum. Tightens the batch budget so a hung run fails fast.
+
+    Even on a TradingView upstream cliff, the bounded retry/cooldown +
+    Reddit + RSS upper bounds should keep the total comfortably under
+    ``COMBINED_CEILING_S`` (45 s). Pre-P4 this was sequential and could
+    easily exceed 90 s under the same conditions.
+    """
+    from tradingview_mcp.server import combined_analysis
+
+    monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_BUDGET_S", "25")
+    monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS", "2")
+
+    t0 = time.perf_counter()
+    result = await asyncio.wait_for(
+        combined_analysis("AAPL", exchange="NASDAQ", timeframe="1D"),
+        timeout=COMBINED_CEILING_S,
+    )
+    elapsed = time.perf_counter() - t0
+
+    assert elapsed < COMBINED_CEILING_S, (
+        f"combined_analysis took {elapsed:.1f}s (ceiling {COMBINED_CEILING_S}s). "
+        f"Either the gather lost its parallelism, or one sub-call is "
+        f"blocking past its bound."
+    )
+
+    # Response shape must survive partial / total upstream failure. Each
+    # branch may be data or an error envelope, but the top-level keys are
+    # always present so the caller can navigate without isinstance gymnastics.
+    assert isinstance(result, dict)
+    assert result["symbol"] == "AAPL"
+    assert "technical" in result
+    assert "sentiment" in result
+    assert "news" in result
+    assert "confluence" in result
+    assert "signals_agree" in result["confluence"]
+
+
+async def test_combined_analysis_parallelism_under_real_load():
+    """Run 3 combined_analysis calls in parallel against real upstream.
+
+    Three of these calls means 9 underlying sub-calls (3 × TA + 3 × Reddit
+    + 3 × RSS). With proper async fan-out the whole batch must still finish
+    inside the single-call ceiling — if it grows toward 3 × ceiling we know
+    something is serializing on the event loop or saturating the default
+    threadpool.
+    """
+    from tradingview_mcp.server import combined_analysis
+
+    symbols = ["AAPL", "MSFT", "NVDA"]
+    t0 = time.perf_counter()
+    results = await asyncio.wait_for(
+        asyncio.gather(
+            *(
+                combined_analysis(sym, exchange="NASDAQ", timeframe="1D")
+                for sym in symbols
+            ),
+            return_exceptions=True,
+        ),
+        timeout=COMBINED_CEILING_S,
+    )
+    elapsed = time.perf_counter() - t0
+
+    assert len(results) == len(symbols)
+    assert elapsed < COMBINED_CEILING_S, (
+        f"3 parallel combined_analysis calls took {elapsed:.1f}s "
+        f"(ceiling {COMBINED_CEILING_S}s). If wall-clock is approaching "
+        f"3 × single-call time, the default ThreadPoolExecutor is "
+        f"saturated by the to_thread-wrapped sync calls — bump it via "
+        f"asyncio.get_event_loop().set_default_executor or expose a "
+        f"semaphore at the handler."
+    )
+
+    # None of the three may leak an unhandled exception.
+    for sym, r in zip(symbols, results):
+        assert not isinstance(r, BaseException), (
+            f"combined_analysis({sym}) leaked: {r!r}"
+        )
+        assert isinstance(r, dict)
+        assert r.get("symbol") == sym
 
 
 # ---------------------------------------------------------------------------
