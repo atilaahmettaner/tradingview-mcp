@@ -50,9 +50,16 @@ def _make_batch_response(symbols: list[str]) -> dict:
 # --- Tests for volume_breakout_scan -----------------------------------------
 
 class TestVolumeBreakoutScanSentinel:
-    def test_all_batches_fail_raises(self):
+    def test_all_batches_fail_raises(self, monkeypatch):
         """When every batch raises, the sentinel must fire."""
         from tradingview_mcp.core.services import scanner_service
+
+        # Disable fast-fail for this test so we can verify the sentinel
+        # behaviour at the "every batch tried, every batch failed" end of
+        # the spectrum. Fast-fail's own behaviour is covered by
+        # ``test_fast_fail_aborts_after_consecutive_failures`` below.
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS", "999")
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_BUDGET_S", "3600")
 
         def always_fail(*_args, **_kwargs):
             # Mirrors the real upstream "empty body" failure mode.
@@ -70,6 +77,64 @@ class TestVolumeBreakoutScanSentinel:
         assert exc_info.value.batches_attempted == 3
         assert exc_info.value.batches_failed == 3
         assert "Expecting value" in exc_info.value.first_error
+
+    def test_fast_fail_aborts_after_consecutive_failures(self, monkeypatch):
+        """Fast-fail must bail after N consecutive batch failures so the tool
+        returns in bounded time instead of grinding through every batch with
+        15s cooldown each."""
+        from tradingview_mcp.core.services import scanner_service
+
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS", "2")
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_BUDGET_S", "3600")
+
+        call_count = {"n": 0}
+
+        def always_fail(*_args, **_kwargs):
+            call_count["n"] += 1
+            raise JSONDecodeError("Expecting value", "", 0)
+
+        with patch.object(scanner_service, "get_multiple_analysis", side_effect=always_fail), \
+             patch.object(scanner_service, "load_symbols", return_value=[f"SYM{i}" for i in range(500)]):
+            # batch_size=100 over 500 symbols would normally be 5 batches,
+            # but fast-fail should stop us at 2.
+            with pytest.raises(BatchExecutionError) as exc_info:
+                scanner_service.volume_breakout_scan(exchange="KUCOIN", timeframe="15m")
+
+        assert call_count["n"] == 2, (
+            f"Expected fast-fail to stop at 2 consecutive failures; got "
+            f"{call_count['n']} calls to upstream."
+        )
+        assert exc_info.value.batches_attempted == 2
+        assert exc_info.value.batches_failed == 2
+
+    def test_partial_success_does_not_trigger_fast_fail(self, monkeypatch):
+        """A successful batch resets the consecutive-failure counter."""
+        from tradingview_mcp.core.services import scanner_service
+
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS", "2")
+        monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_BUDGET_S", "3600")
+
+        # Pattern: fail, succeed, fail, succeed, fail — never 2 in a row.
+        call_log = []
+
+        def alternating(*, screener, interval, symbols):
+            call_log.append(len(symbols))
+            if len(call_log) % 2 == 1:
+                raise JSONDecodeError("Expecting value", "", 0)
+            return _make_batch_response(symbols)
+
+        with patch.object(scanner_service, "get_multiple_analysis", side_effect=alternating), \
+             patch.object(scanner_service, "load_symbols", return_value=[f"SYM{i}" for i in range(500)]):
+            # 500 symbols / 100 = 5 batches. Failures alternate, so no two
+            # are consecutive → fast-fail must NOT trip → all 5 attempted.
+            result = scanner_service.volume_breakout_scan(exchange="KUCOIN", timeframe="15m")
+
+        assert len(call_log) == 5, (
+            f"Expected all 5 batches attempted (alternating failures); got "
+            f"{len(call_log)}."
+        )
+        # 3 failed, 2 succeeded → not all-fail → returns list (not raise).
+        assert isinstance(result, list)
 
     def test_all_succeed_returns_list_no_raise(self):
         """Happy path: every batch returns data, no sentinel."""
