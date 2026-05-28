@@ -104,13 +104,24 @@ def extract_extended_indicators(indicators: Dict) -> Dict:
 
     # --- OBV (On Balance Volume) ---
     obv_direction = None
-    if volume is not None and open_price and close:
-        obv_direction = "accumulation" if close > open_price else "distribution" if close < open_price else "neutral"
+    if volume is not None and open_price and close and high and low:
+        candle_range = high - low
+        if candle_range > 0:
+            # Close position within the candle range (0 = at low, 1 = at high)
+            close_position = (close - low) / candle_range
+            if close_position >= 0.7:
+                obv_direction = "accumulation"
+            elif close_position <= 0.3:
+                obv_direction = "distribution"
+            else:
+                obv_direction = "neutral"
+        else:
+            obv_direction = "neutral"
 
     obv = {
         "current_volume": _safe_round(volume, 0),
         "direction": obv_direction,
-        "note": "OBV direction inferred from current candle (close vs open)",
+        "note": "OBV direction inferred from close position within candle range (0-30%: distribution, 70-100%: accumulation)",
     }
 
     # --- SMA (Simple Moving Average) ---
