@@ -41,6 +41,12 @@ package = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Opt-in markers — only run when explicitly requested via -m so CI default
+# stays hermetic. The 'stress' suite hits real TradingView upstream and
+# asserts wall-clock bounds; ``pytest -m stress`` to run.
+markers = [
+    "stress: real-network stress tests (require live upstream; not in CI)",
+]
 
 [build-system]
 requires = ["setuptools>=61"]

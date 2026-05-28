@@ -12,11 +12,16 @@ behavior) hid rate-limit cliffs as "no results today".
 from __future__ import annotations
 
 import sys
+import time as _time
 from typing import List, Optional
 
 from tradingview_mcp.core.errors import BatchExecutionError
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
+from tradingview_mcp.core.services.screener_service import (
+    _batch_budget_s,
+    _batch_max_consecutive_fails,
+)
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, is_stock_exchange
 
 try:
@@ -62,15 +67,38 @@ def volume_breakout_scan(
 
     batches_attempted = 0
     batches_failed = 0
+    consecutive_failures = 0
     first_error: Optional[str] = None
 
-    for i in range(0, min(len(symbols), 500), batch_size):
+    max_consec = _batch_max_consecutive_fails()
+    budget_s = _batch_budget_s()
+    started_at = _time.time()
+
+    capped_symbols = min(len(symbols), 500)
+    total_batches = (capped_symbols + batch_size - 1) // batch_size
+
+    for i in range(0, capped_symbols, batch_size):
+        # Bail fast if we've spent the wall-clock budget on retries.
+        if (_time.time() - started_at) >= budget_s:
+            try:
+                print(
+                    f"[tradingview_mcp] volume_breakout_scan aborted: "
+                    f"wall-clock budget ({budget_s:.0f}s) exhausted at batch "
+                    f"{batches_attempted}/{total_batches}",
+                    file=sys.stderr,
+                )
+            except Exception:
+                pass
+            break
+
         batch = symbols[i : i + batch_size]
         batches_attempted += 1
         try:
             analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            consecutive_failures = 0
         except Exception as exc:
             batches_failed += 1
+            consecutive_failures += 1
             if first_error is None:
                 first_error = repr(exc)
             try:
@@ -81,6 +109,18 @@ def volume_breakout_scan(
                 )
             except Exception:
                 pass
+
+            if consecutive_failures >= max_consec:
+                try:
+                    print(
+                        f"[tradingview_mcp] volume_breakout_scan aborted: "
+                        f"{consecutive_failures} consecutive batch failures "
+                        f"at batch {batches_attempted}/{total_batches}",
+                        file=sys.stderr,
+                    )
+                except Exception:
+                    pass
+                break
             continue
 
         for symbol, data in analysis.items():

@@ -11,7 +11,9 @@ envelope so callers can distinguish "no matches today" from "upstream cliff".
 """
 from __future__ import annotations
 
+import os
 import sys
+import time as _time
 from typing import Any, List, Optional
 
 from tradingview_mcp.core.errors import BatchExecutionError
@@ -42,6 +44,55 @@ try:
     _SCREENER_AVAILABLE = True
 except ImportError:
     _SCREENER_AVAILABLE = False
+
+
+# ── Batch fast-fail budget ────────────────────────────────────────────────────
+# Critical: without these guards, a batched scanner that loops over 6-8 batches
+# during an upstream cliff sleeps the failure cooldown (15s default) between
+# every single batch — producing a 90-150s "hang" before BatchExecutionError
+# finally surfaces. The fix is two layered bails:
+#
+#   TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS (default 2)
+#       After N consecutive batch failures, stop iterating remaining batches
+#       — upstream is clearly down, further attempts just waste wall-clock.
+#
+#   TRADINGVIEW_MCP_BATCH_BUDGET_S (default 30)
+#       Total wall-clock budget for the whole batched scan. When the budget
+#       elapses we stop iterating, returning either the partial result or
+#       (if zero batches succeeded) raising BatchExecutionError.
+#
+# Both surface the same BatchExecutionError shape so the existing MCP tool
+# wrapper at the boundary translates them to the structured error envelope
+# without code changes.
+
+
+def _batch_max_consecutive_fails() -> int:
+    try:
+        return max(1, int(os.environ.get('TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS', '2')))
+    except Exception:
+        return 2
+
+
+def _batch_budget_s() -> float:
+    try:
+        v = float(os.environ.get('TRADINGVIEW_MCP_BATCH_BUDGET_S', '30'))
+        return max(1.0, v)
+    except Exception:
+        return 30.0
+
+
+def _fill_skipped_tfs(
+    tf_results: dict, all_timeframes: list, reason: str
+) -> None:
+    """Mark every timeframe not yet in ``tf_results`` as skipped.
+
+    Used by the multi-timeframe loop after fast-fail trips so the response
+    explicitly distinguishes "we tried and got an error" from "we never
+    asked because we bailed early".
+    """
+    for tf in all_timeframes:
+        if tf not in tf_results:
+            tf_results[tf] = {"error": f"skipped: {reason}"}
 
 
 # ── Bollinger / trending fetchers ──────────────────────────────────────────────
@@ -149,15 +200,41 @@ def fetch_trending_analysis(
 
     batches_attempted = 0
     batches_failed = 0
+    consecutive_failures = 0
     first_error: Optional[str] = None
 
+    max_consec = _batch_max_consecutive_fails()
+    budget_s = _batch_budget_s()
+    started_at = _time.time()
+    aborted_reason: Optional[str] = None
+
+    total_batches = (len(symbols) + batch_size - 1) // batch_size
+
     for i in range(0, len(symbols), batch_size):
+        # Wall-clock guard: stop iterating once we've burned the budget.
+        # This is the difference between "tool returned in 30s with a
+        # partial / error envelope" and "tool hung for 2 minutes".
+        elapsed = _time.time() - started_at
+        if elapsed >= budget_s:
+            aborted_reason = f"wall-clock budget ({budget_s:.0f}s) exhausted"
+            try:
+                print(
+                    f"[tradingview_mcp] fetch_trending_analysis aborted: "
+                    f"{aborted_reason} after {batches_attempted}/{total_batches} batches",
+                    file=sys.stderr,
+                )
+            except Exception:
+                pass
+            break
+
         batch = symbols[i : i + batch_size]
         batches_attempted += 1
         try:
             analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            consecutive_failures = 0  # Reset on any success.
         except Exception as exc:
             batches_failed += 1
+            consecutive_failures += 1
             if first_error is None:
                 first_error = repr(exc)
             try:
@@ -168,6 +245,24 @@ def fetch_trending_analysis(
                 )
             except Exception:
                 pass
+
+            # Fast-fail: N consecutive failures means upstream is cliffing —
+            # iterating remaining batches just multiplies the cooldown sleeps.
+            if consecutive_failures >= max_consec:
+                aborted_reason = (
+                    f"{consecutive_failures} consecutive batch failures "
+                    f"(upstream cliff)"
+                )
+                try:
+                    print(
+                        f"[tradingview_mcp] fetch_trending_analysis aborted: "
+                        f"{aborted_reason} at batch "
+                        f"{batches_attempted}/{total_batches}",
+                        file=sys.stderr,
+                    )
+                except Exception:
+                    pass
+                break
             continue
 
         for key, value in analysis.items():
@@ -835,12 +930,43 @@ def run_multi_timeframe_analysis(
     tf_results: dict = {}
     alignment_scores: list[int] = []
 
+    # Fast-fail guards: 5 timeframes × (~5s retries + 15s cooldown) ≈ 100s
+    # when upstream cliffs. Bail after N consecutive failures, or when the
+    # wall-clock budget is gone, so the tool returns in bounded time with
+    # whatever timeframes did succeed (or an error envelope on zero success).
+    max_consec = _batch_max_consecutive_fails()
+    budget_s = _batch_budget_s()
+    started_at = _time.time()
+    consecutive_failures = 0
+    aborted_remaining: list[str] = []
+
     for tf in timeframes:
+        # Wall-clock guard.
+        if (_time.time() - started_at) >= budget_s:
+            aborted_remaining = [t for t in timeframes if t not in tf_results]
+            try:
+                print(
+                    f"[tradingview_mcp] run_multi_timeframe_analysis aborted: "
+                    f"wall-clock budget ({budget_s:.0f}s) exhausted; "
+                    f"skipped: {aborted_remaining}",
+                    file=sys.stderr,
+                )
+            except Exception:
+                pass
+            for skip_tf in aborted_remaining:
+                tf_results[skip_tf] = {"error": "skipped: wall-clock budget exhausted"}
+            break
+
         try:
             analysis = get_multiple_analysis(screener=screener, interval=tf, symbols=[symbol])
             if symbol not in analysis or analysis[symbol] is None:
                 tf_results[tf] = {"error": f"No data for {tf}"}
+                consecutive_failures += 1
+                if consecutive_failures >= max_consec:
+                    _fill_skipped_tfs(tf_results, timeframes, "upstream cliff")
+                    break
                 continue
+            consecutive_failures = 0  # Reset on real success.
 
             data = analysis[symbol]
             indicators = data.indicators
@@ -882,6 +1008,19 @@ def run_multi_timeframe_analysis(
             }
         except Exception as exc:
             tf_results[tf] = {"error": str(exc)}
+            consecutive_failures += 1
+            if consecutive_failures >= max_consec:
+                try:
+                    print(
+                        f"[tradingview_mcp] run_multi_timeframe_analysis aborted: "
+                        f"{consecutive_failures} consecutive timeframe failures "
+                        f"(upstream cliff)",
+                        file=sys.stderr,
+                    )
+                except Exception:
+                    pass
+                _fill_skipped_tfs(tf_results, timeframes, "upstream cliff")
+                break
 
     total_score = sum(alignment_scores)
     all_bullish = all(s > 0 for s in alignment_scores) if alignment_scores else False
