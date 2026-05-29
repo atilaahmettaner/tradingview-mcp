@@ -54,6 +54,12 @@ from tradingview_mcp.core.services.options_service import (
     get_options_chain,
     get_unusual_options_activity,
 )
+from tradingview_mcp.core.services.futures_service import (
+    get_futures_overview,
+    get_futures_movers,
+    get_futures_category_snapshot,
+    get_futures_watchlist,
+)
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -84,10 +90,13 @@ mcp = FastMCP(
     name="TradingView Multi-Market Screener",
     instructions=(
         "Multi-market screener backed by TradingView. "
-        "Supports crypto exchanges (KuCoin, Binance, Bybit, MEXC, etc.) and stock markets "
-        "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX). "
+        "Supports crypto exchanges (KuCoin, Binance, Bybit, MEXC, etc.), stock markets "
+        "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX), "
+        "and futures markets (CME, COMEX, NYMEX, CBOT — equity index, energy, metals, "
+        "agriculture, rates, forex, crypto futures). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
-        "volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
+        "volume_breakout_scanner, futures_market_overview, futures_top_movers, "
+        "futures_category_snapshot, futures_watchlist, egx_market_overview, and more."
     ),
 )
 
@@ -810,6 +819,93 @@ def stock_options_unusual_activity(
           strike_vs_spot_pct (moneyness)}
     """
     return get_unusual_options_activity(symbol, top_n, min_volume, expiries)
+
+
+# ── Futures tools ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def futures_market_overview(
+    category: str = "all",
+    exchanges: str = "us",
+    limit: int = 30,
+    volume_min: int = 0,
+) -> dict:
+    """Top futures contracts sorted by trading volume.
+
+    Args:
+        category:   all | equity_index | energy | metals | agriculture | rates | forex | crypto_futures
+        exchanges:  us (CME, COMEX, NYMEX, CBOT) | global (adds ICE, EUREX)
+        limit:      max contracts to return (default 30)
+        volume_min: minimum volume filter (0 = no filter)
+
+    Returns:
+        Dict with total_available count and list of contracts with OHLCV + % change.
+    """
+    try:
+        return get_futures_overview(
+            category=category,
+            exchanges=exchanges,
+            limit=limit,
+            volume_min=volume_min,
+        )
+    except Exception as exc:
+        return make_error(ErrorCode.SERVICE_ERROR, f"Futures overview failed: {exc}")
+
+
+@mcp.tool()
+def futures_top_movers(
+    direction: str = "gainers",
+    exchanges: str = "us",
+    limit: int = 20,
+    volume_min: int = 10,
+) -> dict:
+    """Futures contracts with the biggest percentage moves today.
+
+    Args:
+        direction:  gainers | losers
+        exchanges:  us | global
+        limit:      max results
+        volume_min: minimum volume filter (default 10, filters illiquid contracts)
+
+    Returns:
+        List of futures ranked by % change with OHLCV data.
+    """
+    direction = direction.lower()
+    if direction not in ("gainers", "losers"):
+        direction = "gainers"
+    try:
+        return get_futures_movers(
+            direction=direction,
+            exchanges=exchanges,
+            limit=limit,
+            volume_min=volume_min,
+        )
+    except Exception as exc:
+        return make_error(ErrorCode.SERVICE_ERROR, f"Futures movers failed: {exc}")
+
+
+@mcp.tool()
+def futures_category_snapshot(category: str = "energy") -> dict:
+    """Quote all major front-month contracts in a specific futures category.
+
+    Args:
+        category: equity_index | energy | metals | agriculture | rates | forex | crypto_futures
+
+    Returns:
+        OHLCV quotes for the standard watchlist of contracts in that category.
+        Example symbols: ES1! NQ1! (equity_index), CL1! NG1! (energy), GC1! SI1! (metals).
+    """
+    return get_futures_category_snapshot(category)
+
+
+@mcp.tool()
+def futures_watchlist() -> dict:
+    """Return the full categorized list of well-known front-month futures symbols.
+
+    Categories: equity_index, energy, metals, agriculture, rates, forex, crypto_futures.
+    Use these symbols with futures_category_snapshot or coin_analysis for deeper analysis.
+    """
+    return get_futures_watchlist()
 
 
 # ── Resource ───────────────────────────────────────────────────────────────────
