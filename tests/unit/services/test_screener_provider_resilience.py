@@ -72,7 +72,7 @@ def test_retry_then_succeed(fast_retry):
     calls = {"n": 0}
 
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             calls["n"] += 1
             if calls["n"] < 3:
                 raise _empty_body_error()
@@ -86,7 +86,7 @@ def test_retry_then_succeed(fast_retry):
 def test_persistent_failure_raises_runtime_error(fast_retry):
     """All retries fail and no cache → RuntimeError with actionable message."""
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise _empty_body_error()
 
     with pytest.raises(RuntimeError) as exc_info:
@@ -110,7 +110,7 @@ def test_stale_while_error_returns_cached_payload(fast_retry):
         sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)  # 2 min old
 
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise _empty_body_error()
 
     total, df = sp._scan_with_retry(FakeQuery(), cache_key=cache_key)
@@ -120,7 +120,7 @@ def test_stale_while_error_returns_cached_payload(fast_retry):
 def test_non_transient_error_propagates_immediately(fast_retry):
     """Non-transient errors must NOT be silenced by the retry layer."""
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise ValueError("schema mismatch")
 
     with pytest.raises(ValueError):

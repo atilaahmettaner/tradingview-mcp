@@ -176,6 +176,106 @@ def _wait_for_failure_cooldown() -> None:
         _time.sleep(wait)
 
 
+# --- Auth + proxy + circuit breaker (added 2026-06-03) ---------------------
+# Root cause of the recurring daily empty-body outage: anonymous, single-IP,
+# bot-UA scraping of scanner.tradingview.com gets rate-limited (TradingView
+# returns an empty 200/429 body -> JSONDecodeError "Expecting value"). Three
+# mitigations, applied here:
+#   1. PROXY    — route requests through the (already-built) Webshare rotating
+#                 proxy so traffic isn't all from one IP.
+#   2. COOKIE   — authenticate the screener path with a logged-in TradingView
+#                 session cookie; authenticated requests get far higher limits
+#                 than anonymous scraping. (Path A / tradingview_ta can't take a
+#                 cookie, so it relies on the proxy; Path B / get_scanner_data
+#                 gets both.)
+#   3. CIRCUIT  — a fail-fast breaker that stops re-hammering a blocked
+#                 endpoint for a cooldown window instead of every call
+#                 re-walking the retry ladder and deepening the block.
+#                 (Distinct from TRADINGVIEW_MCP_FAILURE_COOLDOWN_S above,
+#                 which sleeps before retrying; the circuit raises instead.)
+#
+# Secrets live in the gitignored repo-root .env (NOT .mcp.json, which is
+# version-controlled). See .env.example:
+#   TRADINGVIEW_COOKIE   raw cookie header, e.g. "sessionid=abc; sessionid_sign=def"
+#   PROXY_USERNAME_PREFIX / PROXY_PASSWORD / PROXY_HOST  (Webshare)
+#   TRADINGVIEW_MCP_CIRCUIT_COOLDOWN_S  seconds to hold the circuit open (0=off)
+
+# Best-effort .env load so TRADINGVIEW_COOKIE is available regardless of import
+# order (proxy_manager loads the same .env at import time).
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(
+        dotenv_path=_os.path.join(_os.path.dirname(__file__), "../../../../.env"),
+        override=False,
+    )
+except Exception:
+    pass
+
+
+def _tv_cookies():
+    """Parse TRADINGVIEW_COOKIE ('k=v; k2=v2') into a dict for requests, or None.
+    Logged-in requests dodge the anonymous-scraper rate limit that causes the
+    daily empty-body outage."""
+    raw = _os.environ.get('TRADINGVIEW_COOKIE', '').strip()
+    if not raw:
+        return None
+    jar: Dict[str, str] = {}
+    for part in raw.split(';'):
+        part = part.strip()
+        if not part or '=' not in part:
+            continue
+        k, v = part.split('=', 1)
+        jar[k.strip()] = v.strip()
+    return jar or None
+
+
+def _tv_proxies():
+    """requests-style proxies dict from the Webshare proxy manager, or None if
+    not configured. Rotating IPs sidestep per-IP rate limiting."""
+    try:
+        from .proxy_manager import get_proxy
+        return get_proxy()
+    except Exception:
+        return None
+
+
+def _circuit_cooldown_s() -> float:
+    try:
+        return max(0.0, float(_os.environ.get('TRADINGVIEW_MCP_CIRCUIT_COOLDOWN_S', '0')))
+    except Exception:
+        return 0.0
+
+
+_CIRCUIT_LOCK = _Lock()
+_CIRCUIT_OPEN_UNTIL: float = 0.0
+
+
+class ScreenerCircuitOpen(RuntimeError):
+    """Raised when the scanner circuit breaker is open (endpoint recently
+    failing). Surfaced fast to callers so a scan degrades instead of grinding."""
+
+
+def _circuit_check() -> None:
+    """Raise immediately if the circuit is open, instead of hammering a
+    known-blocked endpoint and deepening the block. No-op when cooldown=0."""
+    if _circuit_cooldown_s() <= 0:
+        return
+    with _CIRCUIT_LOCK:
+        remaining = _CIRCUIT_OPEN_UNTIL - _time.time()
+    if remaining > 0:
+        raise ScreenerCircuitOpen(
+            f"scanner circuit open ~{remaining:.0f}s (endpoint rate-limited); failing fast"
+        )
+
+
+def _circuit_record(success: bool) -> None:
+    if _circuit_cooldown_s() <= 0:
+        return
+    global _CIRCUIT_OPEN_UNTIL
+    with _CIRCUIT_LOCK:
+        _CIRCUIT_OPEN_UNTIL = 0.0 if success else (_time.time() + _circuit_cooldown_s())
+
+
 _SCREENER_CACHE: Dict[Tuple, Tuple[float, Any]] = {}
 _SCREENER_CACHE_LOCK = _RLock()
 
@@ -313,13 +413,28 @@ def _format_transient_error(last_exc: BaseException, attempts: int, total_wait: 
     )
 
 
-def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
+def _scan_with_retry(q, cookies=None, proxies=None, cache_key: Optional[Tuple] = None):
     """Wrap Query.get_scanner_data with retries on transient TV outages.
+    Self-configures the TradingView session cookie + Webshare proxy from env
+    when not explicitly supplied, and honors the fail-fast circuit breaker.
     Returns (total, df). Re-raises on non-transient errors or on final failure.
 
     If ``cache_key`` is provided and all retries fail, attempts to return a
     stale-but-usable cached payload before raising — callers that pass a key
     get stale-while-error behavior automatically."""
+    if cookies is None:
+        cookies = _tv_cookies()
+    if proxies is None:
+        proxies = _tv_proxies()
+    try:
+        _circuit_check()  # fail fast if the endpoint is in a cooldown window
+    except ScreenerCircuitOpen:
+        # Degrade to stale data instead of raising when we can.
+        if cache_key is not None:
+            stale = _cache_get_stale(cache_key)
+            if stale is not None:
+                return stale[1]
+        raise
     _wait_for_failure_cooldown()
     delays = (0.0,) + _retry_delays()  # immediate try, then back off
     last_exc: Optional[BaseException] = None
@@ -330,7 +445,9 @@ def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
             _time.sleep(wait)
             total_wait += wait
         try:
-            return q.get_scanner_data(cookies=cookies)
+            result = q.get_scanner_data(cookies=cookies, proxies=proxies)
+            _circuit_record(True)
+            return result
         except Exception as e:  # noqa: BLE001 - intentionally broad, narrowed below
             if not _is_transient_screener_error(e):
                 raise
@@ -344,8 +461,10 @@ def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
             except Exception:
                 pass
             continue
-    # All attempts exhausted — record failure so subsequent calls back off
+    # All attempts exhausted — record failure so subsequent calls back off,
+    # and open the circuit so we stop hammering a blocked endpoint.
     _record_ta_failure()
+    _circuit_record(False)
     # Last-resort: stale-while-error fallback if we have a cache key
     if cache_key is not None:
         stale = _cache_get_stale(cache_key)
@@ -382,7 +501,16 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     if cached is not None:
         return cached
 
+    try:
+        _circuit_check()  # fail fast if the endpoint is in a cooldown window
+    except ScreenerCircuitOpen:
+        # Degrade to stale data instead of raising when we can.
+        stale = _cache_get_stale(cache_key)
+        if stale is not None:
+            return stale[1]
+        raise
     _wait_for_failure_cooldown()
+    proxies = _tv_proxies()  # tradingview_ta has no cookie param; proxy-protect it
     delays = (0.0,) + _retry_delays()
     last_exc: Optional[BaseException] = None
     total_wait = 0.0
@@ -402,10 +530,12 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
                     interval=interval,
                     symbols=symbols,
                     timeout=_socket_timeout_s(),
+                    proxies=proxies,
                 )
             finally:
                 _ta_throttle_release()
             _cache_set(cache_key, result)
+            _circuit_record(True)
             return result
         except Exception as e:  # noqa: BLE001
             if not _is_transient_screener_error(e):
@@ -420,8 +550,10 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
             except Exception:
                 pass
             continue
-    # All attempts exhausted — record failure so subsequent calls back off
+    # All attempts exhausted — record failure so subsequent calls back off,
+    # and open the circuit so we stop hammering a blocked endpoint.
     _record_ta_failure()
+    _circuit_record(False)
     # Last-resort: stale-while-error fallback (up to TRADINGVIEW_MCP_STALE_TTL)
     stale = _cache_get_stale(cache_key)
     if stale is not None:
@@ -504,7 +636,10 @@ def fetch_atr_for_tickers(
         "columns": [col],
     }
     try:
-        resp = requests.post(url, json=payload, timeout=timeout)
+        resp = requests.post(
+            url, json=payload, timeout=timeout,
+            proxies=_tv_proxies(), cookies=_tv_cookies(),
+        )
         resp.raise_for_status()
         body = resp.json()
     except Exception:  # noqa: BLE001 — graceful degrade
