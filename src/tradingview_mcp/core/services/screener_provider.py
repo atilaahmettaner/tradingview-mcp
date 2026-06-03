@@ -239,6 +239,56 @@ def _tv_proxies():
         return None
 
 
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+)
+
+
+class _AuthRequestsShim:
+    """Proxies the real ``requests`` module but injects the TradingView session
+    cookie + a browser User-Agent into ``.post()`` calls. tradingview_ta (Path A,
+    get_multiple_analysis / TA_Handler) hits the SAME scanner.tradingview.com
+    endpoint as the screener but exposes no cookie parameter and ships a bot UA
+    (``tradingview_ta/x.y.z``), so it gets anonymous-rate-limited. Replacing the
+    module-level ``requests`` reference inside tradingview_ta.main with this shim
+    makes Path A authenticated like Path B — without forking the vendored lib or
+    changing its rich Analysis output. Only tradingview_ta is affected; every
+    other module keeps its own untouched ``requests``."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def post(self, url, **kwargs):
+        cookies = _tv_cookies()
+        if cookies and not kwargs.get("cookies"):
+            kwargs["cookies"] = cookies
+        headers = dict(kwargs.get("headers") or {})
+        headers["User-Agent"] = _BROWSER_UA  # replace the self-identifying bot UA
+        kwargs["headers"] = headers
+        return self._real.post(url, **kwargs)
+
+
+def _patch_tradingview_ta_auth() -> None:
+    """Authenticate tradingview_ta's requests (cookie + browser UA) so Path A
+    stops being anonymous — the same root-cause fix already applied to the
+    screener (Path B). Idempotent; no-op if tradingview_ta isn't importable."""
+    try:
+        from tradingview_ta import main as _ta_main
+    except Exception:
+        return
+    if getattr(_ta_main, "_tvmcp_auth_patched", False):
+        return
+    try:
+        _ta_main.requests = _AuthRequestsShim(_ta_main.requests)
+        _ta_main._tvmcp_auth_patched = True
+    except Exception:
+        pass
+
+
 def _circuit_cooldown_s() -> float:
     try:
         return max(0.0, float(_os.environ.get('TRADINGVIEW_MCP_CIRCUIT_COOLDOWN_S', '0')))
@@ -494,6 +544,7 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
         from tradingview_ta import get_multiple_analysis as _gma  # type: ignore
     except Exception as e:
         raise ImportError("tradingview_ta is not installed") from e
+    _patch_tradingview_ta_auth()  # Path A: authenticate via cookie + browser UA
 
     sym_key = tuple(sorted(symbols)) if symbols else ()
     cache_key = ('ta_multi_v1', screener, interval, sym_key)
