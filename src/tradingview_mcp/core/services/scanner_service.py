@@ -11,13 +11,15 @@ behavior) hid rate-limit cliffs as "no results today".
 """
 from __future__ import annotations
 
-import sys
+import logging
 from typing import List, Optional
 
 from tradingview_mcp.core.errors import BatchExecutionError
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, is_stock_exchange
+
+logger = logging.getLogger(__name__)
 
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
@@ -73,14 +75,7 @@ def volume_breakout_scan(
             batches_failed += 1
             if first_error is None:
                 first_error = repr(exc)
-            try:
-                print(
-                    f"[tradingview_mcp] volume_breakout_scan batch "
-                    f"{i // batch_size + 1} failed: {exc!r}",
-                    file=sys.stderr,
-                )
-            except Exception:
-                pass
+            logger.warning("volume_breakout_scan batch %d failed: %r", i // batch_size + 1, exc)
             continue
 
         for symbol, data in analysis.items():

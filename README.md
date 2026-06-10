@@ -200,6 +200,44 @@ Stable codes are defined in [`core/errors.py`](src/tradingview_mcp/core/errors.p
 
 ---
 
+## 🪵 Logging & Observability
+
+The server logs through Python's `logging` module on the `tradingview_mcp`
+hierarchy. Two layers:
+
+- **Operator logs (stderr/file)** — the service layer (retry exhaustion, batch
+  failures, transient upstream errors) logs via `logging`. Configured once at
+  startup by [`core/logging_config.py`](src/tradingview_mcp/core/logging_config.py).
+  Output always goes to **stderr**, never stdout, so it can't corrupt the stdio
+  JSON-RPC stream.
+- **Client logs (MCP notifications)** — the async hot-path tools emit
+  `notifications/message` to the connected MCP client via the request `Context`
+  (an entry trace at debug level, plus a warning when a scan hits a total
+  rate-limit cliff), so the calling agent can see *which* tool ran and why a
+  result is degraded.
+
+**Why:** previously the only diagnostics were a couple of bare
+`print(file=sys.stderr)` calls — there was no level control, no structured
+output, and nothing surfaced to the client. This makes production rate-limit
+cliffs and retry budgets observable.
+
+**Tunables (env vars, all optional):**
+
+| Var | Default | Effect |
+| --- | --- | --- |
+| `LOG_LEVEL` | `WARNING` | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL` |
+| `LOG_FORMAT` | `plain` | `json` for one structured JSON object per line |
+| `LOG_FILE` | _(unset)_ | path to also write a size-rotated log file |
+| `LOG_FILE_MAX_BYTES` | `5000000` | per-file cap before rotation |
+| `LOG_FILE_BACKUPS` | `3` | number of rotated files to keep |
+| `DEBUG_MCP` | _(unset)_ | if set, forces level to `DEBUG` |
+
+The `WARNING` default preserves the previously-always-visible transient-error
+and batch-failure messages; `LOG_LEVEL=INFO`/`DEBUG` reveals entry traces and
+retry detail.
+
+---
+
 ## 📱 Use via Telegram, WhatsApp & More (OpenClaw)
 
 Connect this server to **Telegram, WhatsApp, Discord** and 20+ messaging platforms using [OpenClaw](https://openclaw.ai) — a self-hosted AI gateway. **Tested & verified on Hetzner VPS (Ubuntu 24.04).**

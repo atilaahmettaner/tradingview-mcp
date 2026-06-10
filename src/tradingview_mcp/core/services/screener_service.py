@@ -11,7 +11,7 @@ envelope so callers can distinguish "no matches today" from "upstream cliff".
 """
 from __future__ import annotations
 
-import sys
+import logging
 from typing import Any, List, Optional
 
 from tradingview_mcp.core.errors import BatchExecutionError
@@ -39,6 +39,8 @@ try:
     _SCREENER_AVAILABLE = True
 except ImportError:
     _SCREENER_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 # ── Bollinger / trending fetchers ──────────────────────────────────────────────
@@ -157,14 +159,7 @@ def fetch_trending_analysis(
             batches_failed += 1
             if first_error is None:
                 first_error = repr(exc)
-            try:
-                print(
-                    f"[tradingview_mcp] fetch_trending_analysis batch "
-                    f"{i // batch_size + 1} failed: {exc!r}",
-                    file=sys.stderr,
-                )
-            except Exception:
-                pass
+            logger.warning("fetch_trending_analysis batch %d failed: %r", i // batch_size + 1, exc)
             continue
 
         for key, value in analysis.items():

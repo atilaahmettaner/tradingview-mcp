@@ -2,10 +2,12 @@ from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple
 from ..utils.validators import get_market_type
 import json as _json
+import logging
 import os as _os
-import sys as _sys
 import time as _time
 from threading import RLock as _RLock, Semaphore as _Semaphore, Lock as _Lock
+
+logger = logging.getLogger(__name__)
 
 
 # --- Resilience layer (added 2026-05-13) -----------------------------------
@@ -141,13 +143,7 @@ def _scan_with_retry(q, cookies=None):
             if not _is_transient_screener_error(e):
                 raise
             last_exc = e
-            try:
-                print(
-                    f"[tradingview_mcp] transient scanner error (attempt {i+1}/{len(delays)}): {e!r}",
-                    file=_sys.stderr,
-                )
-            except Exception:
-                pass
+            logger.warning("transient scanner error (attempt %d/%d): %r", i + 1, len(delays), e)
             continue
     # All attempts exhausted
     assert last_exc is not None
@@ -188,13 +184,7 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
             if not _is_transient_screener_error(e):
                 raise
             last_exc = e
-            try:
-                print(
-                    f"[tradingview_mcp] transient TA error (attempt {i+1}/{len(delays)}): {e!r}",
-                    file=_sys.stderr,
-                )
-            except Exception:
-                pass
+            logger.warning("transient TA error (attempt %d/%d): %r", i + 1, len(delays), e)
             continue
     assert last_exc is not None
     raise last_exc

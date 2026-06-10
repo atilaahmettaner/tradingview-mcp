@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
+import sys
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -75,6 +77,9 @@ from tradingview_mcp.core.errors import (
     ErrorCode,
     make_error,
 )
+from tradingview_mcp.core.logging_config import configure_logging
+
+logger = logging.getLogger(__name__)
 
 try:
     import tradingview_screener  # noqa: F401
@@ -97,6 +102,33 @@ mcp = FastMCP(
 )
 
 
+# ── MCP client logging helper ──────────────────────────────────────────────────
+#
+# We fetch the active request Context via ``mcp.get_context()`` rather than
+# declaring a ``ctx: Context`` tool parameter. Reason: this module uses
+# ``from __future__ import annotations`` (PEP 563), so every annotation is a
+# *string* at runtime. FastMCP 1.12's context-parameter detection
+# (``tools/base.py``) runs ``issubclass(param.annotation, Context)`` on the raw
+# signature without resolving strings, so a ``ctx: Context`` param is never
+# recognized — and worse, leaks into the public tool input schema.
+# ``get_context()`` sidesteps detection entirely and leaves every tool's schema
+# untouched (and the P4 async tests, which call handlers directly, unaffected).
+#
+# ``ctx.*`` methods send ``notifications/message`` to the MCP client. Outside a
+# live request (direct/unit calls) there is no session, so the call raises and
+# we no-op — diagnostics must never break a tool result.
+
+
+async def _ctx_log(level: str, message: str) -> None:
+    """Best-effort log to the MCP client via the active request Context.
+    No-op outside a request; never lets a logging failure break the tool."""
+    try:
+        ctx = mcp.get_context()
+        await getattr(ctx, level)(message)
+    except Exception:  # noqa: BLE001 — diagnostics must never fail the tool
+        pass
+
+
 # ── Screener tools ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -115,6 +147,7 @@ async def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: i
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
+    await _ctx_log("debug", f"top_gainers(exchange={exchange}, timeframe={timeframe}, limit={limit})")
     try:
         # Underlying tradingview-screener is sync (uses urllib). Push to a
         # worker thread so the event loop is free for other concurrent
@@ -123,6 +156,7 @@ async def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: i
             fetch_trending_analysis, exchange, timeframe=timeframe, limit=limit
         )
     except BatchExecutionError as e:
+        await _ctx_log("warning", f"top_gainers: all batches failed for {exchange} — {e}")
         return make_error(
             ErrorCode.ALL_BATCHES_FAILED, str(e),
             batches_attempted=e.batches_attempted,
@@ -324,6 +358,7 @@ async def volume_breakout_scanner(
     volume_multiplier = max(1.5, min(10.0, volume_multiplier))
     price_change_min = max(1.0, min(20.0, price_change_min))
     limit = max(1, min(limit, 50))
+    await _ctx_log("debug", f"volume_breakout_scanner(exchange={exchange}, timeframe={timeframe}, limit={limit})")
     try:
         # volume_breakout_scan iterates many batches against the screener
         # endpoint (sync urllib). Off-load to a worker thread to keep the
@@ -333,6 +368,7 @@ async def volume_breakout_scanner(
             exchange, timeframe, volume_multiplier, price_change_min, limit,
         )
     except BatchExecutionError as e:
+        await _ctx_log("warning", f"volume_breakout_scanner: all batches failed for {exchange} — {e}")
         return make_error(
             ErrorCode.ALL_BATCHES_FAILED, str(e),
             batches_attempted=e.batches_attempted,
@@ -536,6 +572,7 @@ async def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dic
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     full_symbol = normalize_tradingview_symbol(symbol, exchange)
+    await _ctx_log("debug", f"multi_timeframe_analysis(symbol={full_symbol}, exchange={exchange})")
     # tradingview_ta backs this with a single threading.Semaphore-gated
     # request; pushing the whole call to a thread keeps the event loop
     # free while we wait on the upstream HTTP.
@@ -565,6 +602,7 @@ async def financial_news(symbol: str = None, category: str = "stocks", limit: in
         category: Feed category ("crypto", "stocks", "all")
         limit: Max number of news items
     """
+    await _ctx_log("debug", f"financial_news(symbol={symbol}, category={category}, limit={limit})")
     # feedparser.parse() is sync — offload so multiple parallel news
     # requests (or a news call interleaved with other tools) don't block
     # the event loop.
@@ -583,6 +621,7 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
     exchange_clean = sanitize_exchange(exchange, "NASDAQ")
     timeframe_clean = sanitize_timeframe(timeframe, "1D")
     cat = "crypto" if exchange_clean.upper() in ["BINANCE", "KUCOIN", "BYBIT", "MEXC"] else "stocks"
+    await _ctx_log("debug", f"combined_analysis(symbol={symbol}, exchange={exchange_clean}, timeframe={timeframe_clean}) — fanning out 3 upstreams")
 
     # The three sub-calls hit independent upstreams (TradingView TA,
     # Reddit, RSS feeds) so fan them out in parallel. Pre-P4 this was
@@ -722,7 +761,9 @@ async def yahoo_price(symbol: str) -> dict:
     Args:
         symbol: Yahoo Finance symbol — e.g. AAPL, BTC-USD, SPY, ^GSPC, EURUSD=X, THYAO.IS
     """
-    return await get_price_async(normalize_yahoo_symbol(symbol))
+    normalized = normalize_yahoo_symbol(symbol)
+    await _ctx_log("debug", f"yahoo_price(symbol={normalized})")
+    return await get_price_async(normalized)
 
 
 @mcp.tool()
@@ -776,6 +817,7 @@ async def stock_extended_hours(symbol: str) -> dict:
         - post_market: {price, as_of_utc, change_vs_regular_close_pct} or null
         - previous_close, currency, exchange, market_state for context
     """
+    await _ctx_log("debug", f"stock_extended_hours(symbol={symbol})")
     return await get_extended_hours_price_async(symbol)
 
 
@@ -869,6 +911,8 @@ def exchanges_list() -> str:
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    configure_logging()
+
     parser = argparse.ArgumentParser(description="TradingView Screener MCP server")
     parser.add_argument(
         "transport",
@@ -881,9 +925,9 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     args = parser.parse_args()
 
-    if os.environ.get("DEBUG_MCP"):
-        import sys
-        print(f"[DEBUG_MCP] pkg cwd={os.getcwd()} argv={sys.argv} file={__file__}", file=sys.stderr, flush=True)
+    # DEBUG_MCP forces the logger to DEBUG (see configure_logging), so this line
+    # surfaces whenever the env var is set.
+    logger.debug("startup: cwd=%s argv=%s file=%s transport=%s", os.getcwd(), sys.argv, __file__, args.transport)
 
     if args.transport == "stdio":
         mcp.run()
