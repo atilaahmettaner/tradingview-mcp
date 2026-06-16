@@ -8,11 +8,29 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from tradingview_screener import futures as _futures_query
-    from tradingview_screener.column import Column
+    from tradingview_screener import Query
     _AVAILABLE = True
 except ImportError:
     _AVAILABLE = False
+
+
+def _futures_query():
+    """Build a query targeting the TradingView *futures* scanner.
+
+    We deliberately use ``Query().set_markets("futures")`` instead of the
+    ``futures()`` helper shipped in tradingview-screener 3.2+. Starting in
+    3.2.0 every bare ``Query()`` / ``futures()`` injects a default *stock*
+    preset (an ``is_primary`` filter plus an equity ``type``/``typespecs``
+    filter2) that silently returns 0 rows for non-equity markets — which would
+    break both this module and the crypto screener tools. tradingview-screener
+    is pinned to ==3.0.0 in pyproject.toml for exactly this reason; if you ever
+    lift that pin, you must clear the stock preset (drop ``filter``/``filter2``)
+    before querying futures or crypto.
+    """
+    if not _AVAILABLE:
+        raise RuntimeError("tradingview_screener not installed")
+    return Query().set_markets("futures")
+
 
 # Exchanges grouped by category for filtering
 US_FUTURES_EXCHANGES = ["CME", "COMEX", "NYMEX", "CBOT"]
@@ -29,8 +47,8 @@ FUTURES_WATCHLIST: dict[str, list[str]] = {
         "NYMEX:MCL1!", "ICEEUR:BRN1!",
     ],
     "metals": [
-        "COMEX:GC1!", "COMEX:SI1!", "COMEX:HG1!", "COMEX:PL1!",
-        "NYMEX:PA1!",
+        "COMEX:GC1!", "COMEX:SI1!", "COMEX:HG1!", "NYMEX:PL1!",
+        "NYMEX:PA1!", "COMEX:ALI1!", "COMEX:ZNC1!",
     ],
     "agriculture": [
         "CBOT:ZC1!", "CBOT:ZW1!", "CBOT:ZS1!", "CBOT:ZL1!",
@@ -56,8 +74,6 @@ _SCREENER_COLS = [
 
 
 def _build_query(exchanges: list[str], volume_min: int = 0, limit: int = 50):
-    if not _AVAILABLE:
-        raise RuntimeError("tradingview_screener not installed")
     q = _futures_query()
     q = q.select(*_SCREENER_COLS)
     filters = [{"left": "exchange", "operation": "in_range", "right": exchanges}]
@@ -65,6 +81,16 @@ def _build_query(exchanges: list[str], volume_min: int = 0, limit: int = 50):
         filters.append({"left": "volume", "operation": "greater", "right": volume_min})
     q.query["filter"] = filters
     q.query["range"] = [0, limit]
+    return q
+
+
+def _tickers_query(symbols: list[str]):
+    """Query a fixed set of contracts by ticker (no exchange/volume filter)."""
+    q = _futures_query()
+    q = q.select(*_SCREENER_COLS)
+    q.query["symbols"] = {"tickers": symbols}
+    q.query.pop("filter", None)
+    q.query["range"] = [0, len(symbols)]
     return q
 
 
@@ -84,17 +110,33 @@ def get_futures_overview(
         volume_min: minimum volume filter
     """
     ex_list = ALL_FUTURES_EXCHANGES if exchanges.lower() == "global" else US_FUTURES_EXCHANGES
+
+    # For a specific known category, query its contracts directly and rank them
+    # by volume. A thinly-traded category (e.g. metals) often does NOT appear in
+    # the top `limit` rows of an all-futures volume scan, so the old approach of
+    # "scan everything, then filter by name" returned nothing — and then
+    # silently fell back to the full unfiltered list, mislabeling unrelated
+    # contracts under the requested category. Querying the category tickers is
+    # both reliable and honest.
+    if category != "all" and category in FUTURES_WATCHLIST:
+        symbols = FUTURES_WATCHLIST[category]
+        q = _tickers_query(symbols)
+        q.query["sort"] = {"sortBy": "volume", "sortOrder": "desc"}
+        count, df = q.get_scanner_data()
+        rows = df.to_dict(orient="records")
+        return {
+            "category": category,
+            "exchanges": ex_list,
+            "total_available": count,
+            "returned": len(rows),
+            "contracts": rows,
+        }
+
+    # category == "all" (or unrecognized): broad volume scan across exchanges.
     q = _build_query(ex_list, volume_min=volume_min, limit=limit)
     q.query["sort"] = {"sortBy": "volume", "sortOrder": "desc"}
     count, df = q.get_scanner_data()
-
     rows = df.to_dict(orient="records")
-
-    # Filter by category watchlist if requested
-    if category != "all" and category in FUTURES_WATCHLIST:
-        watchlist_names = {s.split(":")[-1] for s in FUTURES_WATCHLIST[category]}
-        rows = [r for r in rows if r.get("name") in watchlist_names] or rows
-
     return {
         "category": category,
         "exchanges": ex_list,
@@ -130,31 +172,32 @@ def get_futures_category_snapshot(category: str) -> dict[str, Any]:
     Args:
         category: equity_index | energy | metals | agriculture | rates | forex | crypto_futures
     """
-    if not _AVAILABLE:
-        raise RuntimeError("tradingview_screener not installed")
-
     symbols = FUTURES_WATCHLIST.get(category)
     if not symbols:
         valid = list(FUTURES_WATCHLIST.keys())
         return {"error": f"Unknown category '{category}'. Valid: {valid}"}
 
-    q = _futures_query()
-    q = q.select(*_SCREENER_COLS)
-    # Filter by specific ticker symbols
-    ticker_list = symbols
-    q.query["symbols"] = {"tickers": ticker_list}
-    q.query.pop("filter", None)
-    q.query["range"] = [0, len(ticker_list)]
+    q = _tickers_query(symbols)
 
     try:
         count, df = q.get_scanner_data()
+    except Exception as exc:
+        # Do NOT silently fall back to an unrelated volume scan — that returns
+        # contracts the caller never asked for, mislabeled under this category.
+        # Surface the failure honestly instead.
         return {
             "category": category,
-            "contracts": df.to_dict(orient="records"),
+            "error": f"futures snapshot request failed: {exc}",
+            "requested": symbols,
+            "contracts": [],
         }
-    except Exception as exc:
-        # Fallback: use volume scan filtered to category names
-        return get_futures_overview(category=category, limit=50, volume_min=0)
+
+    return {
+        "category": category,
+        "requested": symbols,
+        "returned": len(df),
+        "contracts": df.to_dict(orient="records"),
+    }
 
 
 def get_futures_watchlist() -> dict[str, Any]:

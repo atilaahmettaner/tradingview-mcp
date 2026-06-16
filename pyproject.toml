@@ -17,7 +17,12 @@ dependencies = [
   "feedparser>=6.0.12",
   "mcp[cli]>=1.12.0",
   "requests>=2.32",
-  "tradingview-screener>=0.6.4",
+  # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
+  # *stock* preset filter that silently returns 0 rows for crypto/futures
+  # scans, which would break coin/screener/futures tools. The Docker build uses
+  # `uv pip install --system .` (ignores uv.lock), so an open range would let a
+  # rebuild drift to 3.2.0 and break paid traffic. See futures_service._futures_query.
+  "tradingview-screener==3.0.0",
   "tradingview-ta>=3.3.0",
 ]
 

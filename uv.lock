@@ -1027,7 +1027,7 @@ requires-dist = [
     { name = "feedparser", specifier = ">=6.0.12" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.12.0" },
     { name = "requests", specifier = ">=2.32" },
-    { name = "tradingview-screener", specifier = ">=0.6.4" },
+    { name = "tradingview-screener", specifier = "==3.0.0" },
     { name = "tradingview-ta", specifier = ">=3.3.0" },
 ]
 
