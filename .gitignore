@@ -242,3 +242,6 @@ node_modules/
 # Build artifacts that shouldn't be committed
 dist/
 *.egg-info/
+
+# Auto-generated backtest results
+result/

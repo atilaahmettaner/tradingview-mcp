@@ -26,6 +26,11 @@ dependencies = [
   "tradingview-ta>=3.3.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.3",
+]
+
 [project.scripts]
 # Entry point now points to packaged module
 tradingview-mcp = "tradingview_mcp.server:main"
@@ -37,10 +42,10 @@ where = ["src"]
 tradingview_mcp = ["coinlist/*.txt"]
 
 [tool.uv]
-dev-dependencies = [
-    "pytest>=9.0.3",
-]
+
 package = true
+
+
 
 [build-system]
 requires = ["setuptools>=61"]

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import statistics
 import urllib.request
 from datetime import datetime, timezone
@@ -25,15 +26,22 @@ from tradingview_mcp.core.services.indicators_calc import (
     calc_rsi, calc_bollinger, calc_macd, calc_ema, calc_sma, calc_atr,
     calc_supertrend, calc_donchian,
 )
+from tradingview_mcp.core.utils.save_utils import save_result_to_json
 
 _UA       = "tradingview-mcp/0.7.0 backtest-bot"
 _YF_BASE  = "https://query1.finance.yahoo.com/v8/finance/chart"
 
 _VALID_PERIODS   = {"1mo", "3mo", "6mo", "1y", "2y"}
-_VALID_INTERVALS = {"1d", "1h"}
+_VALID_INTERVALS = {"1d", "1h", "15m", "5m", "1m"}
 
 # Annualization factor for Sharpe ratio
-_ANNUALIZATION = {"1d": 252, "1h": 252 * 6}
+_ANNUALIZATION = {
+    "1d":  252,
+    "1h":  252 * 6,
+    "15m": 252 * 6 * 4,
+    "5m":  252 * 6 * 12,
+    "1m":  252 * 6 * 60,
+}
 
 _STRATEGY_LABELS = {
     "rsi":              "RSI Oversold/Overbought",
@@ -77,7 +85,7 @@ def _fetch_ohlcv(symbol: str, period: str, interval: str = "1d") -> list[dict]:
     result     = data["chart"]["result"][0]
     timestamps = result["timestamp"]
     q          = result["indicators"]["quote"][0]
-    date_fmt   = "%Y-%m-%d %H:%M" if interval == "1h" else "%Y-%m-%d"
+    date_fmt   = "%Y-%m-%d" if interval == "1d" else "%Y-%m-%d %H:%M"
 
     candles = []
     for i, ts in enumerate(timestamps):
@@ -428,6 +436,33 @@ def _buy_and_hold_return(candles: list[dict]) -> float:
     return round((candles[-1]["close"] - candles[0]["close"]) / candles[0]["close"] * 100, 2)
 
 
+def _save_result_to_json(result: dict):
+    """Saves the backtest result dictionary to a JSON file."""
+    try:
+        try:
+            # Go up 5 levels to get from /src/tradingview_mcp/core/services to the project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+        except NameError:
+            project_root = os.getcwd()
+
+        output_dir = os.path.join(project_root, "result")
+        os.makedirs(output_dir, exist_ok=True)
+
+        symbol = result.get("symbol", "unknown_symbol")
+        strategy = result.get("strategy")
+        if not strategy:
+            strategy = "comparison"
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{symbol}_{strategy}_{timestamp}.json"
+        filepath = os.path.join(output_dir, filename)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERROR] Failed to save backtest result to JSON: {e}")
+
+
 # ─── Public API: run_backtest ─────────────────────────────────────────────────
 
 def run_backtest(
@@ -499,6 +534,7 @@ def run_backtest(
     if include_equity_curve:
         result["equity_curve"] = _build_equity_curve(trades, initial_capital)
 
+    _save_result_to_json(result)
     return result
 
 
@@ -558,7 +594,7 @@ def compare_strategies(
                     f"bars (use period='1y' or '2y') to produce signals; "
                     f"their zero-trade results below are not meaningful.")
 
-    return {
+    result = {
         "symbol":                  symbol.upper(),
         "period":                  period,
         "interval":                interval,
@@ -576,8 +612,9 @@ def compare_strategies(
         "disclaimer":              "Past performance does not guarantee future results.",
         "timestamp":               datetime.now(timezone.utc).isoformat(),
     }
-
-
+    _save_result_to_json(result)
+    return result
+    
 # ─── Public API: walk_forward_backtest ────────────────────────────────────────
 
 def walk_forward_backtest(
@@ -702,7 +739,7 @@ def walk_forward_backtest(
     else:
         verdict = "OVERFITTED — strategy fails out-of-sample, do not trade live"
 
-    return {
+    result = {
         "symbol":                  symbol.upper(),
         "strategy":                strategy,
         "strategy_label":          _STRATEGY_LABELS[strategy],
@@ -732,3 +769,5 @@ def walk_forward_backtest(
         "disclaimer":              "Past performance does not guarantee future results. For educational use only.",
         "timestamp":               datetime.now(timezone.utc).isoformat(),
     }
+    _save_result_to_json(result)
+    return result
