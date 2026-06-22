@@ -19,7 +19,7 @@ Backtesting + live sentiment + Yahoo Finance + 30+ technical-analysis tools — 
 > **Skip the setup. Use the hosted version.** [**pro.cryptosieve.com**](https://pro.cryptosieve.com) gives you all 30+ tools as one connector URL for Claude.ai, ChatGPT, Copilot, and Cursor. No `uv`, `pandas`, or Python to wrangle. **$9 per month, with a 3 day free trial.** Self hosting stays free forever; the hosted plan is just for folks who would rather skip the ops.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/downloads/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Ready-brightgreen)](https://modelcontextprotocol.com/)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-blueviolet)](https://openclaw.ai)
 [![Version](https://img.shields.io/badge/version-v0.7.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
@@ -147,7 +147,7 @@ Symptom — you see this in the Claude Desktop logs shortly after adding the con
 [tradingview] notifications/cancelled — reason: "MCP error -32001: Request timed out"
 ```
 
-**Why it happens:** on Windows with Python 3.14, `uvx` downloads `tradingview-mcp-server`, creates a fresh virtualenv, and installs dependencies the first time it runs. Because `pandas` has no prebuilt wheel for Python 3.14 yet, pip falls back to a source build — which typically exceeds Claude Desktop's 60-second MCP initialization timeout.
+**Why it happens:** Python 3.14 is not supported yet. `uvx` downloads `tradingview-mcp-server`, creates a fresh virtualenv, and installs dependencies the first time it runs. Some native dependencies in the MCP stack do not currently publish compatible Python 3.14 wheels, so installation can fall back to source builds or fail before Claude Desktop finishes initializing the server.
 
 **Fix — pin to Python 3.13 (has prebuilt pandas wheels):**
 
