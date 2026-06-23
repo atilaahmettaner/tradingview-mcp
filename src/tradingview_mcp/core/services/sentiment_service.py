@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from tradingview_mcp.core.services.proxy_manager import build_opener_with_proxy, is_proxy_configured
+from tradingview_mcp.core.utils.cache import cached
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,15 @@ def _label(score: float) -> str:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+@cached(
+    key_fn=lambda symbol, category="all", limit=20: (
+        symbol.upper(),
+        category,
+        int(limit),
+    ),
+    ttl_env="CACHE_TTL_SENTIMENT",
+    default_ttl=300.0,
+)
 def analyze_sentiment(
     symbol: str,
     category: str = "all",

@@ -51,6 +51,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 **Stability & Strategy Expansion (May 2026)**
 
 - **9 backtest strategies** (up from 6) — added `rsi_pullback`, `keltner_breakout`, and `triple_ema`, covering trend-pullback, ATR-normalized breakout, and SMA200-filtered EMA cross edges. `compare_strategies` now ranks the full 9.
+- **Generic per-tool TTL cache** — `yahoo_price`, `extended_hours`, `financial_news`, `sentiment`, and both options tools no longer re-issue HTTP on every call. Per-tool TTLs are env-tunable (`CACHE_TTL_YAHOO_PRICE`, `CACHE_TTL_NEWS`, etc. — see [Caching & throttle env vars](#caching--throttle-env-vars)). Error responses are not cached, so transient upstream failures aren't memoized. *(PR [#43](https://github.com/atilaahmettaner/tradingview-mcp/pull/43) — open)*
 - **Resilience layer** — automatic retry + 60-second TTL cache on the TradingView screener provider, eliminating transient `"Expecting value"` errors on `combined_analysis` and `multi_timeframe_analysis`. *(PR [#32](https://github.com/atilaahmettaner/tradingview-mcp/pull/32) — merged)*
 - **Financial news service rebuild** — replaces deprecated Reuters RSS endpoints with Yahoo Finance, MarketWatch, and CNBC. Fixes the long-standing `count: 0` bug on `financial_news`. *(PR [#33](https://github.com/atilaahmettaner/tradingview-mcp/pull/33) — merged)*
 - **TA throttle** — caps concurrent `tradingview_ta` calls (default 4) + min 0.8s spacing between starts. Prevents parallel bursts of `combined_analysis` / `multi_timeframe_analysis` from hitting TradingView's empty-body rate-limit cliff. Tunable via env vars. *(PR [#34](https://github.com/atilaahmettaner/tradingview-mcp/pull/34) — merged)*
@@ -204,6 +205,56 @@ else:
 ```
 
 Stable codes are defined in [`core/errors.py`](src/tradingview_mcp/core/errors.py).
+
+---
+
+## ⚙️ Caching & throttle env vars
+
+All env vars are optional — sensible defaults apply when unset. Set any cache TTL to `0` to disable that tool's cache at runtime.
+
+**Per-tool TTL cache** (`@cached` decorator, in seconds):
+
+| Env var | Default | Tool |
+| --- | --- | --- |
+| `CACHE_TTL_YAHOO_PRICE` | 30 | `yahoo_price` |
+| `CACHE_TTL_EXTENDED_HOURS` | 30 | `stock_extended_hours` |
+| `CACHE_TTL_OPTIONS_CHAIN` | 60 | `stock_options_chain` |
+| `CACHE_TTL_OPTIONS_UNUSUAL` | 60 | `stock_options_unusual_activity` |
+| `CACHE_TTL_NEWS` | 300 | `financial_news` |
+| `CACHE_TTL_SENTIMENT` | 300 | `analyze_sentiment` |
+
+Error responses (`{"error": ...}` envelopes) are **not** cached, so transient upstream failures don't get memoized for the TTL window.
+
+**Screener resilience layer** (shared by `combined_analysis`, `multi_timeframe_analysis`, EGX/scanner tools):
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `TRADINGVIEW_MCP_CACHE_TTL` | 60 | TTL for the screener provider's shared cache (seconds) |
+| `TRADINGVIEW_MCP_RETRY_DELAYS` | `0.5,1.5,4.0` | Comma-separated backoff between retries on transient errors |
+
+**TA throttle** (caps parallel `tradingview_ta` calls):
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `TRADINGVIEW_MCP_MAX_INFLIGHT` | 4 | Max concurrent TA calls |
+| `TRADINGVIEW_MCP_MIN_INTERVAL_S` | 0.8 | Min seconds between TA call starts |
+
+Set in `claude_desktop_config.json` via the `env` key:
+
+```json
+{
+  "mcpServers": {
+    "tradingview": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "--from", "tradingview-mcp-server", "tradingview-mcp"],
+      "env": {
+        "CACHE_TTL_YAHOO_PRICE": "60",
+        "CACHE_TTL_NEWS": "600"
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -447,6 +498,7 @@ Every sponsor directly funds new features like Walk-Forward Backtesting, Twitter
 - [x] Backtesting engine (9 strategies + Sharpe / Calmar / Expectancy)
 - [x] Walk-forward backtesting (overfitting detection)
 - [x] Resilience layer (retry + TTL cache) on screener provider
+- [x] Per-tool TTL cache on Yahoo / news / sentiment / options (env-tunable, error-aware)
 - [x] Hourly (1h) backtesting timeframe
 - [ ] Twitter/X market sentiment
 - [ ] Paper trading simulation

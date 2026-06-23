@@ -20,11 +20,19 @@ from tradingview_mcp.core.services import screener_provider as sp
 @pytest.fixture(autouse=True)
 def _reset_state():
     """Clear cache + last-failure timestamp between tests."""
-    with sp._SCREENER_CACHE_LOCK:
-        sp._SCREENER_CACHE.clear()
+    sp._SCREENER_CACHE.clear()
     with sp._TA_FAILURE_LOCK:
         sp._LAST_TA_FAILURE_TS = 0.0
     yield
+
+
+def _backdate_cache_entry(cache_key, seconds: float) -> None:
+    """Shift an entry's stored timestamp into the past so the fresh window
+    misses but the stale window still hits."""
+    cache = sp._SCREENER_CACHE
+    with cache._lock:
+        ts, payload = cache._store[cache_key]
+        cache._store[cache_key] = (ts - seconds, payload)
 
 
 @pytest.fixture
@@ -72,7 +80,7 @@ def test_retry_then_succeed(fast_retry):
     calls = {"n": 0}
 
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             calls["n"] += 1
             if calls["n"] < 3:
                 raise _empty_body_error()
@@ -86,7 +94,7 @@ def test_retry_then_succeed(fast_retry):
 def test_persistent_failure_raises_runtime_error(fast_retry):
     """All retries fail and no cache → RuntimeError with actionable message."""
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise _empty_body_error()
 
     with pytest.raises(RuntimeError) as exc_info:
@@ -105,12 +113,10 @@ def test_stale_while_error_returns_cached_payload(fast_retry):
 
     # Force the freshness window to be already expired so _cache_get misses,
     # but stale lookup still hits.
-    with sp._SCREENER_CACHE_LOCK:
-        ts, payload = sp._SCREENER_CACHE[cache_key]
-        sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)  # 2 min old
+    _backdate_cache_entry(cache_key, 120.0)  # 2 min old
 
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise _empty_body_error()
 
     total, df = sp._scan_with_retry(FakeQuery(), cache_key=cache_key)
@@ -120,7 +126,7 @@ def test_stale_while_error_returns_cached_payload(fast_retry):
 def test_non_transient_error_propagates_immediately(fast_retry):
     """Non-transient errors must NOT be silenced by the retry layer."""
     class FakeQuery:
-        def get_scanner_data(self, cookies=None):
+        def get_scanner_data(self, cookies=None, proxies=None):
             raise ValueError("schema mismatch")
 
     with pytest.raises(ValueError):
@@ -195,9 +201,7 @@ def test_resilient_ta_returns_stale_on_persistent_failure(fast_retry, monkeypatc
     # Manually expire the FRESH window so the next call must re-fetch,
     # but stale window still holds.
     cache_key = ("ta_multi_v1", "egypt", "1D", ("EGX:ASCM",))
-    with sp._SCREENER_CACHE_LOCK:
-        ts, payload = sp._SCREENER_CACHE[cache_key]
-        sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)
+    _backdate_cache_entry(cache_key, 120.0)
 
     # Upstream now broken; stale fallback should kick in
     result = sp.resilient_get_multiple_analysis("egypt", "1D", ["EGX:ASCM"])

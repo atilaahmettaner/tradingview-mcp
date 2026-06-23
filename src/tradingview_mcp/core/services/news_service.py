@@ -19,12 +19,24 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from tradingview_mcp.core.utils.cache import cached
+
 # feedparser is bundled with agent-reach (installed globally)
 try:
     import feedparser
     _FEEDPARSER_AVAILABLE = True
 except ImportError:
     _FEEDPARSER_AVAILABLE = False
+
+
+def _is_news_error(items: object) -> bool:
+    """Skip caching when feedparser is missing (returns error sentinel list)."""
+    return (
+        isinstance(items, list)
+        and len(items) == 1
+        and isinstance(items[0], dict)
+        and "error" in items[0]
+    )
 
 # ─── Feed Catalog ─────────────────────────────────────────────────────────────
 
@@ -56,6 +68,16 @@ _TIMEOUT = 8
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+@cached(
+    key_fn=lambda symbol=None, category="stocks", limit=10: (
+        (symbol or "").upper(),
+        category,
+        int(limit),
+    ),
+    ttl_env="CACHE_TTL_NEWS",
+    default_ttl=300.0,
+    cache_unless=_is_news_error,
+)
 def fetch_news(
     symbol: Optional[str] = None,
     category: str = "stocks",
