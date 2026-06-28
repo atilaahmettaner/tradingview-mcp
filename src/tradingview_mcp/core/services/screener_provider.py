@@ -313,6 +313,23 @@ def _format_transient_error(last_exc: BaseException, attempts: int, total_wait: 
     )
 
 
+def humanize_upstream_error(exc: BaseException) -> str:
+    """Normalise an exception for a USER-FACING error envelope.
+
+    Both resilience wrappers already emit a clean terminal message, but a raw
+    ``json.JSONDecodeError`` ("Expecting value: line 1 column 1 (char 0)") can
+    still escape a non-wrapped sub-call and surface verbatim through a tool's
+    outer ``except`` handler. Collapse those transient upstream errors into a
+    plain retry hint; pass our already-clean message and genuine errors (e.g.
+    "invalid symbol") through unchanged so real problems stay diagnosable."""
+    msg = str(exc)
+    if msg.startswith("Upstream TradingView scanner returned transient"):
+        return msg  # already our clean terminal message
+    if _is_transient_screener_error(exc):
+        return "TradingView data is temporarily unavailable — please retry in a moment."
+    return msg
+
+
 def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
     """Wrap Query.get_scanner_data with retries on transient TV outages.
     Returns (total, df). Re-raises on non-transient errors or on final failure.

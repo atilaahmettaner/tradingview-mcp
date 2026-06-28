@@ -26,7 +26,7 @@ from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type
 
 # Resilience layer (does not require tradingview_ta; safe to import unconditionally).
-from tradingview_mcp.core.services.screener_provider import _scan_with_retry
+from tradingview_mcp.core.services.screener_provider import _scan_with_retry, humanize_upstream_error
 
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
@@ -128,7 +128,7 @@ def fetch_bollinger_analysis(
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=symbols)
     except Exception as exc:
-        raise RuntimeError(f"Analysis failed: {exc}") from exc
+        raise RuntimeError(f"Analysis failed: {humanize_upstream_error(exc)}") from exc
 
     rows: List[Row] = []
     for key, value in analysis.items():
@@ -699,7 +699,7 @@ def analyze_coin(
             **trade_data,
         }
     except Exception as exc:
-        return {"error": f"Analysis failed: {exc}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+        return {"error": f"Analysis failed: {humanize_upstream_error(exc)}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
 
 
 # ── Consecutive candle pattern scan ────────────────────────────────────────────
@@ -739,7 +739,7 @@ def scan_consecutive_candles(
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=symbols)
     except Exception as exc:
-        return {"error": f"Pattern analysis failed: {exc}", "exchange": exchange, "timeframe": timeframe}
+        return {"error": f"Pattern analysis failed: {humanize_upstream_error(exc)}", "exchange": exchange, "timeframe": timeframe}
 
     pattern_coins: list[dict] = []
 

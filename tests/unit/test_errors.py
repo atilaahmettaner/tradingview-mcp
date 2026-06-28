@@ -102,3 +102,35 @@ class TestBatchExecutionError:
     def test_is_a_real_exception(self):
         with pytest.raises(BatchExecutionError):
             raise BatchExecutionError(1, 1, "x")
+
+
+# ── humanize_upstream_error: no raw JSONDecodeError in user-facing envelopes ──
+# Both resilience wrappers emit a clean terminal message, but a raw
+# json.JSONDecodeError ("Expecting value: line 1 column 1 (char 0)") could
+# escape a non-wrapped sub-call and surface verbatim through a tool's outer
+# `except`. The user-facing boundary now normalises those.
+
+class TestHumanizeUpstreamError:
+    @staticmethod
+    def _h(exc):
+        from tradingview_mcp.core.services.screener_provider import humanize_upstream_error
+        return humanize_upstream_error(exc)
+
+    def test_raw_jsondecodeerror_becomes_clean_hint(self):
+        import json
+        msg = self._h(json.JSONDecodeError("Expecting value", "", 0))
+        assert "Expecting value" not in msg
+        assert "temporarily unavailable" in msg
+
+    def test_socket_timeout_becomes_clean_hint(self):
+        import socket
+        assert "temporarily unavailable" in self._h(socket.timeout("timed out"))
+
+    def test_already_clean_terminal_message_passes_through(self):
+        clean = "Upstream TradingView scanner returned transient errors on all 3 attempts spanning 12s (...)"
+        assert self._h(RuntimeError(clean)) == clean
+
+    def test_genuine_error_passes_through(self):
+        # Real, actionable errors (e.g. invalid symbol) must stay diagnosable.
+        real = "One or more symbol is invalid. Symbol should be a list of exchange and ticker"
+        assert self._h(ValueError(real)) == real

@@ -33,6 +33,7 @@ try:
     import tradingview_ta  # noqa: F401  presence check
     from tradingview_mcp.core.services.screener_provider import (
         resilient_get_multiple_analysis as get_multiple_analysis,
+        humanize_upstream_error,
     )
     _TA_AVAILABLE = True
 except ImportError:
@@ -300,7 +301,7 @@ def volume_confirmation_analyze(
             },
         }
     except Exception as exc:
-        return {"error": f"Analysis failed: {exc}"}
+        return {"error": f"Analysis failed: {humanize_upstream_error(exc)}"}
 
 
 # ── Smart volume scanner ───────────────────────────────────────────────────────
