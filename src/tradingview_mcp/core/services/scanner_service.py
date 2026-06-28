@@ -22,7 +22,11 @@ from tradingview_mcp.core.services.screener_service import (
     _batch_budget_s,
     _batch_max_consecutive_fails,
 )
-from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, is_stock_exchange
+from tradingview_mcp.core.utils.validators import (
+    EXCHANGE_SCREENER,
+    normalize_tradingview_symbol,
+    resolve_screener_for_symbol,
+)
 
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
@@ -206,18 +210,15 @@ def volume_confirmation_analyze(
     Returns:
         Dict with price data, volume analysis, technical indicators, and signals.
     """
-    # Normalise symbol
-    if not is_stock_exchange(exchange) and not symbol.upper().endswith("USDT"):
-        symbol = symbol.upper() + "USDT"
-    else:
-        symbol = symbol.upper()
-
-    if is_stock_exchange(exchange) and ":" not in symbol:
-        full_symbol = f"{exchange.upper()}:{symbol}"
-    else:
-        full_symbol = symbol
-
-    screener = EXCHANGE_SCREENER.get(exchange, "crypto")
+    # Resolve to a fully-qualified EXCHANGE:TICKER via the canonical helper — the
+    # exact path analyze_coin() (coin_analysis) uses. The old hand-rolled
+    # normalisation only prefixed the venue for STOCK exchanges, so every crypto
+    # symbol reached tradingview_ta as a bare ticker (e.g. "BTCUSDT") and was
+    # rejected with "Symbol should be a list of exchange and ticker" — ~99% of
+    # volume_confirmation_analysis calls failed. This also fixes forex/commodity
+    # symbols (XAUUSD -> TVC:GOLD) and picks the screener from the resolved venue.
+    full_symbol = normalize_tradingview_symbol(symbol, exchange)
+    screener = resolve_screener_for_symbol(full_symbol, exchange)
 
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])

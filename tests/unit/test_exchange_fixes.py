@@ -143,3 +143,48 @@ class TestSymbolConstruction:
     def test_unknown_exchange_still_falls_back_to_kucoin(self):
         """Unrecognised exchange falls back to KUCOIN default then gets KUCOIN prefix."""
         assert self._build_symbol("INVALID", "GDX") == "KUCOIN:GDX"
+
+
+# ── Bug 3 fix: volume_confirmation_analyze sent bare crypto symbols ────────────
+# It hand-rolled symbol normalisation and only prefixed the venue for STOCK
+# exchanges, so crypto symbols reached tradingview_ta as a bare ticker
+# ("BTCUSDT") and were rejected — ~99% of volume_confirmation_analysis calls
+# failed. It now uses the canonical normalize_tradingview_symbol() like
+# analyze_coin(). These tests capture the symbol actually sent upstream (no
+# network) and assert it is fully qualified.
+
+class TestVolumeConfirmationSymbolPrefix:
+    @staticmethod
+    def _capture(symbol, exchange):
+        import tradingview_mcp.core.services.scanner_service as svc
+        seen = {}
+
+        def fake_gma(screener, interval, symbols):
+            seen["symbols"] = symbols
+            seen["screener"] = screener
+            return {}  # empty -> function returns a "No data" envelope after the call
+
+        orig = svc.get_multiple_analysis
+        svc.get_multiple_analysis = fake_gma
+        try:
+            svc.volume_confirmation_analyze(symbol, exchange, "15m")
+        finally:
+            svc.get_multiple_analysis = orig
+        return seen
+
+    def test_crypto_symbol_is_venue_prefixed(self):
+        seen = self._capture("BTCUSDT", "KUCOIN")
+        assert seen["symbols"] == ["KUCOIN:BTCUSDT"]  # not bare "BTCUSDT"
+        assert seen["screener"] == "crypto"
+
+    def test_stock_symbol_is_venue_prefixed(self):
+        seen = self._capture("AAPL", "NASDAQ")
+        assert seen["symbols"] == ["NASDAQ:AAPL"]
+        assert seen["screener"] == "america"
+
+    def test_commodity_alias_resolves(self):
+        # XAUUSD must resolve to the TradingView commodity symbol, not get a
+        # spurious USDT suffix (the old code did "XAUUSD" -> "XAUUSDUSDT").
+        seen = self._capture("XAUUSD", "KUCOIN")
+        assert seen["symbols"] == ["TVC:GOLD"]
+        assert seen["screener"] == "cfd"
