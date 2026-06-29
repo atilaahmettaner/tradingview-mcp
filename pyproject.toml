@@ -3,7 +3,7 @@ name = "tradingview-mcp-server"
 version = "0.7.1"
 description = "Advanced AI Trading Intelligence Framework — MCP server with walk-forward backtesting, trade logs, equity curves, 1h timeframe, sentiment, Yahoo Finance, and 30+ technical analysis tools"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 authors = [
   { name = "Atila Ahmettaner" }
 ]
@@ -11,6 +11,10 @@ urls = { Repository = "https://github.com/atilaahmettaner/tradingview-mcp" }
 keywords = ["mcp", "tradingview", "crypto", "technical analysis", "screener", "backtesting", "walk-forward", "sentiment", "yahoo-finance", "trading", "agents", "algorithmic-trading", "equity-curve"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [

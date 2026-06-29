@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- **Python 3.8+** (Python 3.10+ recommended)
+- **Python 3.10-3.13**
 - **UV Package Manager** (for dependency management)
 - **Claude Desktop or Codex** (for MCP integration)
 - **Internet Connection** (for TradingView data access)
