@@ -29,9 +29,17 @@ import urllib.request
 import urllib.error
 from typing import Optional
 
+import httpx
+
+from tradingview_mcp.core.services.proxy_manager import get_httpx_proxy
+
 _TIMEOUT = 12
 _UA = "tradingview-mcp/0.8.1"
 _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
+
+
+def _quote_url(symbol: str) -> str:
+    return f"{_BASE}/{symbol}?interval=1m&range=1d&includePrePost=true"
 
 
 def _change_pct(price: Optional[float], reference: Optional[float]) -> Optional[float]:
@@ -47,26 +55,8 @@ def _fmt_time(ts: Optional[int]) -> Optional[str]:
     return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(ts))
 
 
-def get_extended_hours_price(symbol: str) -> dict:
-    """Fetch latest pre-market, regular-session, and post-market prices.
-
-    Args:
-        symbol: US stock symbol (e.g. AAPL, NVDA, SPY, ^GSPC).
-
-    Returns:
-        Dict with `pre_market`, `regular`, `post_market` blocks plus computed
-        percentage changes. On upstream failure, returns `{symbol, error}`.
-    """
-    url = f"{_BASE}/{symbol}?interval=1m&range=1d&includePrePost=true"
-    req = urllib.request.Request(
-        url, headers={"User-Agent": _UA, "Accept": "application/json"}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, json.JSONDecodeError) as e:
-        return {"symbol": symbol.upper(), "error": f"{type(e).__name__}: {e}"}
-
+def _shape_extended_hours(symbol: str, data: dict) -> dict:
+    """Pure formatter for the Yahoo chart response. Shared sync + async."""
     try:
         result = data["chart"]["result"][0]
         meta = result["meta"]
@@ -132,3 +122,47 @@ def get_extended_hours_price(symbol: str) -> dict:
         }
 
     return out
+
+
+def get_extended_hours_price(symbol: str) -> dict:
+    """Fetch latest pre-market, regular-session, and post-market prices (sync).
+
+    Args:
+        symbol: US stock symbol (e.g. AAPL, NVDA, SPY, ^GSPC).
+
+    Returns:
+        Dict with `pre_market`, `regular`, `post_market` blocks plus computed
+        percentage changes. On upstream failure, returns `{symbol, error}`.
+    """
+    req = urllib.request.Request(
+        _quote_url(symbol),
+        headers={"User-Agent": _UA, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, json.JSONDecodeError) as e:
+        return {"symbol": symbol.upper(), "error": f"{type(e).__name__}: {e}"}
+
+    return _shape_extended_hours(symbol, data)
+
+
+async def get_extended_hours_price_async(symbol: str) -> dict:
+    """Async version of :func:`get_extended_hours_price` (uses httpx).
+
+    Same return shape, including the error envelope on failure.
+    """
+    proxy = get_httpx_proxy()
+    try:
+        async with httpx.AsyncClient(
+            timeout=_TIMEOUT,
+            headers={"User-Agent": _UA, "Accept": "application/json"},
+            proxy=proxy,
+        ) as client:
+            resp = await client.get(_quote_url(symbol))
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        return {"symbol": symbol.upper(), "error": f"{type(e).__name__}: {e}"}
+
+    return _shape_extended_hours(symbol, data)

@@ -15,6 +15,7 @@ classifiers = [
 ]
 dependencies = [
   "feedparser>=6.0.12",
+  "httpx>=0.27",
   "mcp[cli]>=1.12.0",
   "requests>=2.32",
   # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
@@ -39,8 +40,18 @@ tradingview_mcp = ["coinlist/*.txt"]
 [tool.uv]
 dev-dependencies = [
     "pytest>=9.0.3",
+    "pytest-asyncio>=0.24",
 ]
 package = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Opt-in markers — only run when explicitly requested via -m so CI default
+# stays hermetic. The 'stress' suite hits real TradingView upstream and
+# asserts wall-clock bounds; ``pytest -m stress`` to run.
+markers = [
+    "stress: real-network stress tests (require live upstream; not in CI)",
+]
 
 [build-system]
 requires = ["setuptools>=61"]
