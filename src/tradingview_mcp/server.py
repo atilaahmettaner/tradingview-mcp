@@ -158,9 +158,15 @@ def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25
 def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshold: float = 0.04, limit: int = 50) -> list[dict]:
     """Scan for assets with low Bollinger Band Width (squeeze detection). Works with crypto and stocks.
 
+    This scans a whole EXCHANGE for squeezes (canonical name is exactly
+    `bollinger_scan`; there is no "get_bollinger_band_analysis" tool). For
+    the Bollinger read of ONE symbol, call `coin_analysis` instead.
+
+    Example: bollinger_scan(exchange="BINANCE", timeframe="15m", bbw_threshold=0.008)
+
     Args:
         exchange: Exchange — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
-        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M. Typical squeeze thresholds: 15m→0.008, 1h→0.02, 4h→0.04, 1D→0.12
         bbw_threshold: Maximum BBW value to filter (default 0.04)
         limit: Number of rows to return (max 100)
     """
@@ -206,9 +212,17 @@ def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int =
 def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m") -> dict:
     """Get detailed analysis for a specific asset (coin or stock) on specified exchange and timeframe.
 
+    This is the canonical single-symbol technical readout (there is no
+    "get_technical_analysis" or "get_technical_summary" tool — use THIS one).
+    Use `multi_timeframe_analysis` instead when you need trend alignment
+    across several timeframes, and `combined_analysis` when you also want
+    Reddit sentiment + news in the same call.
+
+    Example: coin_analysis(symbol="BTCUSDT", exchange="BINANCE", timeframe="1h")
+
     Args:
-        symbol: Symbol — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
-        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
+        symbol: Bare ticker, no exchange prefix — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
+        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX. If the symbol isn't listed there, the error's `listed_on` field names exchanges that do list it.
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W, 1M)
 
     Returns:
@@ -523,8 +537,15 @@ def egx_fibonacci_retracement(symbol: str, lookback: str = "52W", timeframe: str
 def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dict:
     """Multi-timeframe alignment analysis (Weekly → Daily → 4H → 1H → 15m).
 
+    Canonical name is exactly `multi_timeframe_analysis` (there is no
+    "get_multi_timeframe_analysis" tool). Use this for cross-timeframe trend
+    alignment on ONE symbol; for a single-timeframe deep dive use
+    `coin_analysis`; for TA + sentiment + news use `combined_analysis`.
+
+    Example: multi_timeframe_analysis(symbol="SOLUSDT", exchange="BINANCE")
+
     Args:
-        symbol: Symbol — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX), "GDX" (AMEX)
+        symbol: Bare ticker, no exchange prefix — crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX), "GDX" (AMEX)
         exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
@@ -562,8 +583,14 @@ def financial_news(symbol: str = None, category: str = "stocks", limit: int = 10
 def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: str = "1D") -> dict:
     """POWER TOOL: TradingView technical analysis + Reddit sentiment + Financial news.
 
+    Use this when you want TA AND sentiment AND news for one symbol in a
+    single call. For indicators only, `coin_analysis` is faster; for
+    cross-timeframe trend alignment use `multi_timeframe_analysis`.
+
+    Example: combined_analysis(symbol="NVDA", exchange="NASDAQ", timeframe="1D")
+
     Args:
-        symbol: Asset symbol ("AAPL", "BTCUSDT", "THYAO", "GDX")
+        symbol: Bare ticker, no exchange prefix ("AAPL", "BTCUSDT", "THYAO", "GDX")
         exchange: Exchange (NASDAQ, NYSE, AMEX, NYSEARCA, PCX, BINANCE, KUCOIN, MEXC, BIST, EGX, TWSE, TPEX)
         timeframe: Analysis timeframe (5m, 15m, 1h, 4h, 1D, 1W)
     """

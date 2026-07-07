@@ -15,13 +15,14 @@ import sys
 import time as _time
 from typing import List, Optional
 
-from tradingview_mcp.core.errors import BatchExecutionError
+from tradingview_mcp.core.errors import BatchExecutionError, ErrorCode, make_error
 from tradingview_mcp.core.services.coinlist import load_symbols
-from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.services.screener_service import (
     _batch_budget_s,
     _batch_max_consecutive_fails,
+    symbol_not_found_error,
 )
+from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import (
     EXCHANGE_SCREENER,
     normalize_tradingview_symbol,
@@ -224,11 +225,21 @@ def volume_confirmation_analyze(
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
         if not analysis or full_symbol not in analysis:
-            return {"error": f"No data found for {full_symbol}"}
+            return symbol_not_found_error(
+                symbol, exchange, timeframe=timeframe, full_symbol=full_symbol
+            )
 
         data = analysis[full_symbol]
         if not data or not hasattr(data, "indicators"):
-            return {"error": f"No indicator data for {full_symbol}"}
+            return make_error(
+                ErrorCode.NO_DATA,
+                f"No indicator data for {full_symbol}. The venue returned a row "
+                "without indicators — retrying the same request will not help; "
+                "try another timeframe or exchange.",
+                retryable=False,
+                symbol=symbol, exchange=exchange, timeframe=timeframe,
+                full_symbol=full_symbol,
+            )
 
         ind = data.indicators
         volume = ind.get("volume", 0)
@@ -301,7 +312,12 @@ def volume_confirmation_analyze(
             },
         }
     except Exception as exc:
-        return {"error": f"Analysis failed: {humanize_upstream_error(exc)}"}
+        return make_error(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Analysis failed: {humanize_upstream_error(exc)}",
+            retryable=True, retry_after_s=60,
+            symbol=symbol, exchange=exchange, timeframe=timeframe,
+        )
 
 
 # ── Smart volume scanner ───────────────────────────────────────────────────────

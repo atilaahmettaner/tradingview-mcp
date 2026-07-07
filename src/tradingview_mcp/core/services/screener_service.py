@@ -16,12 +16,12 @@ import sys
 import time as _time
 from typing import Any, List, Optional
 
-from tradingview_mcp.core.errors import BatchExecutionError
+from tradingview_mcp.core.errors import BatchExecutionError, ErrorCode, make_error
 from tradingview_mcp.core.types import (
     IndicatorMap, MultiRow, Row,
     percent_change, tf_to_tv_resolution,
 )
-from tradingview_mcp.core.services.coinlist import load_symbols
+from tradingview_mcp.core.services.coinlist import exchanges_listing_symbol, load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type
 
@@ -568,6 +568,35 @@ def fetch_multi_timeframe_patterns(
 
 # ── Coin analysis (single asset) ───────────────────────────────────────────────
 
+def symbol_not_found_error(symbol: str, exchange: str, **context: Any) -> dict:
+    """SYMBOL_NOT_FOUND envelope with actionable, locally-sourced suggestions.
+
+    Telemetry showed agents retrying the exact same not-found request dozens
+    of times (e.g. HYPEUSDT on BINANCE) because the old bare-string error gave
+    no retryability signal and no alternative. This envelope says explicitly:
+    not retryable here, but *these* exchanges list the ticker (from the bundled
+    coinlists — zero network cost).
+    """
+    listed_on = exchanges_listing_symbol(symbol)
+    message = f"No data found for {symbol} on {exchange}."
+    if listed_on:
+        message += (
+            " Retrying on this exchange will fail again; the symbol is listed on: "
+            + ", ".join(listed_on)
+            + ". Retry with one of those as `exchange`."
+        )
+    else:
+        message += (
+            " No local listing found on any supported exchange — verify the ticker"
+            " spelling; retrying the same request will return the same error."
+        )
+    return make_error(
+        ErrorCode.SYMBOL_NOT_FOUND, message,
+        retryable=False, symbol=symbol, exchange=exchange, listed_on=listed_on,
+        **context,
+    )
+
+
 def analyze_coin(
     symbol: str,
     exchange: str,
@@ -606,7 +635,7 @@ def analyze_coin(
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
 
         if full_symbol not in analysis or analysis[full_symbol] is None:
-            return {"error": f"No data found for {symbol} on {exchange}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+            return symbol_not_found_error(symbol, exchange, timeframe=timeframe)
 
         data = analysis[full_symbol]
         indicators = data.indicators
@@ -699,7 +728,15 @@ def analyze_coin(
             **trade_data,
         }
     except Exception as exc:
-        return {"error": f"Analysis failed: {humanize_upstream_error(exc)}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+        # Transient upstream outages (TradingView's 30-90s empty-body cliffs)
+        # dominate this path — signal machine-readable retryability so agents
+        # wait-and-retry instead of hammering or giving up.
+        return make_error(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Analysis failed: {humanize_upstream_error(exc)}",
+            retryable=True, retry_after_s=60,
+            symbol=symbol, exchange=exchange, timeframe=timeframe,
+        )
 
 
 # ── Consecutive candle pattern scan ────────────────────────────────────────────
@@ -739,7 +776,12 @@ def scan_consecutive_candles(
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=symbols)
     except Exception as exc:
-        return {"error": f"Pattern analysis failed: {humanize_upstream_error(exc)}", "exchange": exchange, "timeframe": timeframe}
+        return make_error(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Pattern analysis failed: {humanize_upstream_error(exc)}",
+            retryable=True, retry_after_s=60,
+            exchange=exchange, timeframe=timeframe,
+        )
 
     pattern_coins: list[dict] = []
 
