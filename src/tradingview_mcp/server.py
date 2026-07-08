@@ -43,8 +43,10 @@ from tradingview_mcp.core.services.egx_service import (
     generate_egx_trade_plan,
     analyze_egx_fibonacci,
 )
-from tradingview_mcp.core.services.sentiment_service import analyze_sentiment
-from tradingview_mcp.core.services.news_service import fetch_news_summary
+from tradingview_mcp.core.services.marketaux_service import (
+    analyze_sentiment,
+    fetch_news_summary,
+)
 from tradingview_mcp.core.services.yahoo_finance_service import (
     get_price,
     get_price_async,
@@ -226,7 +228,7 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
     "get_technical_analysis" or "get_technical_summary" tool — use THIS one).
     Use `multi_timeframe_analysis` instead when you need trend alignment
     across several timeframes, and `combined_analysis` when you also want
-    Reddit sentiment + news in the same call.
+    news sentiment + headlines in the same call.
 
     Example: coin_analysis(symbol="BTCUSDT", exchange="BINANCE", timeframe="1h")
 
@@ -576,34 +578,33 @@ async def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dic
 
 @mcp.tool()
 def market_sentiment(symbol: str, category: str = "all", limit: int = 20) -> dict:
-    """Real-time Reddit sentiment analysis for stocks and crypto.
+    """News sentiment for stocks and crypto (licensed Marketaux entity sentiment).
 
     Args:
         symbol: Asset symbol ("AAPL", "BTC", "ETH", "TSLA")
-        category: Subreddit group to search ("crypto", "stocks", "all")
-        limit: Number of posts to analyse
+        category: News group to search ("crypto", "stocks", "all")
+        limit: Max articles to analyse
     """
     return analyze_sentiment(symbol, category, limit)
 
 
 @mcp.tool()
 async def financial_news(symbol: str = None, category: str = "stocks", limit: int = 10) -> dict:
-    """Real-time financial news from RSS feeds (Reuters, CoinDesk, etc.)
+    """Real-time financial news via Marketaux (licensed).
 
     Args:
         symbol: Optional symbol filter ("AAPL", "BTC"). None = all news.
-        category: Feed category ("crypto", "stocks", "all")
+        category: News category ("crypto", "stocks", "all")
         limit: Max number of news items
     """
-    # feedparser.parse() is sync — offload so multiple parallel news
-    # requests (or a news call interleaved with other tools) don't block
-    # the event loop.
+    # The Marketaux fetch is sync (urllib) — offload so parallel news
+    # requests don't block the event loop.
     return await asyncio.to_thread(fetch_news_summary, symbol, category, limit)
 
 
 @mcp.tool()
 async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: str = "1D") -> dict:
-    """POWER TOOL: TradingView technical analysis + Reddit sentiment + Financial news.
+    """POWER TOOL: TradingView technical analysis + news sentiment + financial news.
 
     Use this when you want TA AND sentiment AND news for one symbol in a
     single call. For indicators only, `coin_analysis` is faster; for
@@ -621,7 +622,7 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
     cat = "crypto" if exchange_clean.upper() in ["BINANCE", "KUCOIN", "BYBIT", "MEXC"] else "stocks"
 
     # The three sub-calls hit independent upstreams (TradingView TA,
-    # Reddit, RSS feeds) so fan them out in parallel. Pre-P4 this was
+    # Marketaux news/sentiment) so fan them out in parallel. Pre-P4 this was
     # ~3x sequential wall-clock; now bounded by the slowest single call.
     # The TA throttle (threading.Semaphore in screener_provider) still
     # caps in-flight TV calls correctly because asyncio.to_thread runs
@@ -652,8 +653,8 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
             "recommendation": (
                 f"Technical {tech_signal} "
                 f"{'confirmed by' if signals_agree else 'conflicts with'} "
-                f"{sentiment.get('sentiment_label', 'Neutral')} Reddit sentiment "
-                f"({sentiment.get('posts_analyzed', 0)} posts analyzed)"
+                f"{sentiment.get('sentiment_label', 'Neutral')} news sentiment "
+                f"({sentiment.get('posts_analyzed', 0)} articles analyzed)"
             ),
         },
     }
