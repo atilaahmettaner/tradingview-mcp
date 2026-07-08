@@ -103,6 +103,21 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 pip install tradingview-mcp-server
 ```
 
+### Optional: news & sentiment (free Marketaux key)
+
+`financial_news` and `market_sentiment` (plus the news/sentiment parts of
+`combined_analysis`) are powered by [Marketaux](https://www.marketaux.com/) —
+licensed market news with per-entity sentiment. Grab a **free API key**
+(100 requests/day; the server caches for 4h and shares one fetch between news
+and sentiment, so the free tier goes a long way) and set:
+
+```bash
+export MARKETAUX_API_TOKEN=your_token_here   # optional
+```
+
+Without a token those two tools return a friendly "not configured" note — all
+other tools work normally.
+
 ### Claude Desktop Config (`claude_desktop_config.json`)
 
 > **Note:** On macOS, GUI apps like Claude Desktop may not have `~/.local/bin` in their PATH. Use the full path to `uvx` to avoid "command not found" errors.
