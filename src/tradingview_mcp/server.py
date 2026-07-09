@@ -67,6 +67,7 @@ from tradingview_mcp.core.services.futures_service import (
     get_futures_category_snapshot,
     get_futures_watchlist,
 )
+from tradingview_mcp.core.services.fxmacrodata_service import get_release_calendar
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -103,12 +104,37 @@ mcp = FastMCP(
         "agriculture, rates, forex, crypto futures). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, futures_market_overview, futures_top_movers, "
-        "futures_category_snapshot, futures_watchlist, egx_market_overview, and more."
+        "futures_category_snapshot, futures_watchlist, fxmacrodata_release_calendar, "
+        "egx_market_overview, and more."
     ),
 )
 
 
 # ── Screener tools ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def fxmacrodata_release_calendar(
+    currency: str = "usd",
+    limit: int = 25,
+    min_tier: Optional[int] = 1,
+) -> dict:
+    """Get official macro release-calendar events from FXMacroData.
+
+    Use this tool before planning forex, futures, equity-index, or crypto trades
+    around market-moving macro events such as CPI, payrolls, GDP, PCE, retail
+    sales, and central-bank decisions.
+
+    Args:
+        currency: ISO currency code, e.g. usd, eur, gbp, jpy, aud.
+        limit: Number of scheduled events to fetch, capped at 100.
+        min_tier: Optional market-tier filter. Use 1 for top-tier events, 2 for
+            high and medium impact, or null to return all fetched events.
+    """
+    return await get_release_calendar(
+        currency=currency,
+        limit=limit,
+        min_tier=min_tier,
+    )
 
 @mcp.tool()
 async def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict] | dict:
