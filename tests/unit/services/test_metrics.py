@@ -165,16 +165,29 @@ def test_intra_trade_drawdown_is_captured_when_candles_are_supplied():
 
 
 def test_calmar_uses_the_deeper_drawdown():
-    """Understating drawdown inflates Calmar, which divides by it."""
-    closes = [100.0, 60.0, 110.0]
-    candles = make_candles(closes)
-    one_trade = [trade(candles[0]["date"], candles[-1]["date"], 100.0, 110.0, 10.0)]
+    """Understating drawdown inflates Calmar, which divides by it.
 
-    shallow = _calc_metrics(one_trade, 10_000, "1d")
-    deep = _calc_metrics(one_trade, 10_000, "1d", candles=candles)
+    Both drawdowns must be non-zero for this to test anything: when equity
+    never dips at an exit, calmar_ratio is the 0.0 "undefined" sentinel and any
+    comparison against it is vacuous. So trade one loses, giving the
+    exit-sampled curve a real 20% drawdown, and trade two dips to half its
+    entry before closing green — visible only when marked to market.
+    """
+    candles = make_candles([100.0, 80.0, 100.0, 50.0, 50.0, 110.0])
+    trades = [
+        trade(candles[0]["date"], candles[1]["date"], 100.0, 80.0, -20.0),
+        trade(candles[2]["date"], candles[5]["date"], 100.0, 110.0, 10.0),
+    ]
 
-    assert abs(deep["max_drawdown_pct"]) > abs(shallow["max_drawdown_pct"])
-    assert abs(deep["calmar_ratio"]) < abs(shallow["calmar_ratio"] or 1e9)
+    shallow = _calc_metrics(trades, 10_000, "1d")
+    deep = _calc_metrics(trades, 10_000, "1d", candles=candles)
+
+    assert shallow["max_drawdown_pct"] == pytest.approx(-20.0, abs=0.1)
+    assert deep["max_drawdown_pct"] == pytest.approx(-60.0, abs=0.1)
+
+    # Same numerator, deeper denominator: Calmar must shrink, not stay put.
+    assert shallow["calmar_ratio"] != 0.0, "fixture must produce a real Calmar"
+    assert abs(deep["calmar_ratio"]) < abs(shallow["calmar_ratio"])
 
 
 def test_drawdown_falls_back_cleanly_when_dates_do_not_match_candles():
@@ -193,3 +206,12 @@ def test_no_trades_returns_the_empty_shape():
     assert m["total_trades"] == 0
     assert m["final_capital"] == 10_000
     json.dumps(m)  # must remain serialisable
+
+
+def test_result_shape_does_not_depend_on_whether_trades_fired():
+    """A client should not have to branch on trade count to read a key."""
+    empty = _calc_metrics([], 10_000, "1d")
+    populated = _calc_metrics(
+        [trade("2024-01-01", "2024-01-05", 100, 110, 10.0)], 10_000, "1d"
+    )
+    assert set(empty) == set(populated)

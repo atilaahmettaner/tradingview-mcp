@@ -448,7 +448,8 @@ def _calc_metrics(
         "total_trades": 0, "win_rate_pct": 0, "winning_trades": 0, "losing_trades": 0,
         "total_return_pct": 0, "final_capital": initial_capital,
         "avg_gain_pct": 0, "avg_loss_pct": 0, "max_drawdown_pct": 0,
-        "profit_factor": 0, "sharpe_ratio": 0, "calmar_ratio": 0,
+        "profit_factor": 0, "no_losing_trades": False,
+        "sharpe_ratio": 0, "calmar_ratio": 0,
         "expectancy_pct": 0, "best_trade": None, "worst_trade": None,
     }
     if not trades:
