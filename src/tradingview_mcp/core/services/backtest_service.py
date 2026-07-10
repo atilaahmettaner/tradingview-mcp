@@ -189,13 +189,17 @@ def _run_donchian(candles, period=20, **_):
     dc     = calc_donchian(highs, lows, period)
     trades, position = [], None
     for i in range(1, len(candles)):
-        if dc["upper"][i] is None:
+        # Break the *previous* bar's channel. calc_donchian's window for bar i
+        # includes bar i itself, so comparing bar i (or i-1) against its own
+        # channel can never be a breakout: a value is never strictly greater
+        # than a max that contains it.
+        upper, lower = dc["upper"][i - 1], dc["lower"][i - 1]
+        if upper is None or lower is None:
             continue
         price, date = candles[i]["close"], candles[i]["date"]
-        prev_high   = highs[i - 1]
-        if position is None and dc["upper"][i - 1] is not None and prev_high > dc["upper"][i - 1]:
+        if position is None and price > upper:
             position = {"entry_date": date, "entry_price": price, "strategy": "donchian"}
-        elif position is not None and dc["lower"][i] is not None and price < dc["lower"][i]:
+        elif position is not None and price < lower:
             trades.append({**position, "exit_date": date, "exit_price": price})
             position = None
     return trades
@@ -356,12 +360,96 @@ def _build_equity_curve(trades: list[dict], initial_capital: float) -> list[dict
 
 # ─── Metrics ──────────────────────────────────────────────────────────────────
 
-def _calc_metrics(trades: list[dict], initial_capital: float, interval: str = "1d") -> dict:
+_DATE_FORMATS = ("%Y-%m-%d %H:%M", "%Y-%m-%d")
+
+
+def _parse_bar_date(value: str) -> Optional[datetime]:
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _trades_per_year(trades: list[dict], interval: str) -> float:
+    """Observations-per-year factor for annualising *per-trade* returns.
+
+    ``_calc_metrics`` builds one return per trade, not one per bar. Annualising
+    those by the bar count (252 for daily) assumes a trade every bar and
+    inflates Sharpe by ``sqrt(252 / actual_trades_per_year)`` — roughly 16x for
+    a ten-trade year. Derive the real frequency from the trade dates instead.
+
+    Falls back to the bar-count factor when dates are unusable, and caps at it
+    besides: a strategy cannot trade more often than the data has bars.
+    """
+    bars_per_year = float(_ANNUALIZATION.get(interval, 252))
+
+    first = _parse_bar_date(trades[0]["entry_date"])
+    last  = _parse_bar_date(trades[-1]["exit_date"])
+    if first is None or last is None:
+        return bars_per_year
+
+    span_years = (last - first).total_seconds() / (365.25 * 24 * 3600)
+    if span_years <= 0:
+        return bars_per_year
+
+    return min(len(trades) / span_years, bars_per_year)
+
+
+def _max_drawdown_pct(
+    trades: list[dict],
+    initial_capital: float,
+    candles: Optional[list[dict]] = None,
+) -> float:
+    """Largest peak-to-trough equity decline, in percent.
+
+    Given *candles*, the open position is marked to market on every bar it is
+    held, so a drawdown that opens and closes inside a single trade is seen.
+    Without them the curve is sampled only at trade exits, which understates
+    the true decline — and so inflates Calmar, which divides by it.
+
+    Marking uses each bar's close, not its low, so this is a close-to-close
+    figure: still a lower bound on intraday pain, but a far tighter one.
+    """
+    equity = peak = float(initial_capital)
+    max_dd = 0.0
+
+    def observe(value: float) -> None:
+        nonlocal peak, max_dd
+        peak = max(peak, value)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - value) / peak * 100)
+
+    bar_index = {c["date"]: i for i, c in enumerate(candles)} if candles else {}
+
+    for trade in trades:
+        start = bar_index.get(trade["entry_date"])
+        end   = bar_index.get(trade["exit_date"])
+        entry = trade.get("entry_price") or 0
+
+        if start is not None and end is not None and end >= start and entry > 0:
+            for bar in candles[start:end + 1]:
+                observe(equity * (bar["close"] / entry))
+
+        equity *= (1 + trade["return_pct"] / 100)
+        observe(equity)
+
+    return max_dd
+
+
+def _calc_metrics(
+    trades: list[dict],
+    initial_capital: float,
+    interval: str = "1d",
+    candles: Optional[list[dict]] = None,
+) -> dict:
     empty = {
         "total_trades": 0, "win_rate_pct": 0, "winning_trades": 0, "losing_trades": 0,
         "total_return_pct": 0, "final_capital": initial_capital,
         "avg_gain_pct": 0, "avg_loss_pct": 0, "max_drawdown_pct": 0,
-        "profit_factor": 0, "sharpe_ratio": 0, "calmar_ratio": 0,
+        "profit_factor": 0, "no_losing_trades": False,
+        "sharpe_ratio": 0, "calmar_ratio": 0,
         "expectancy_pct": 0, "best_trade": None, "worst_trade": None,
     }
     if not trades:
@@ -371,30 +459,33 @@ def _calc_metrics(trades: list[dict], initial_capital: float, interval: str = "1
     losers  = [t for t in trades if t["return_pct"] <= 0]
 
     capital = initial_capital
-    peak    = capital
-    max_dd  = 0.0
     returns = []
     for t in trades:
         r = t["return_pct"] / 100
         capital *= (1 + r)
         returns.append(r)
-        peak   = max(peak, capital)
-        max_dd = max(max_dd, (peak - capital) / peak * 100)
+
+    max_dd = _max_drawdown_pct(trades, initial_capital, candles)
 
     total_return  = (capital - initial_capital) / initial_capital * 100
     avg_gain      = sum(t["return_pct"] for t in winners) / len(winners) if winners else 0
     avg_loss      = sum(t["return_pct"] for t in losers)  / len(losers)  if losers  else 0
     gp            = sum(t["return_pct"] for t in winners)
     gl            = abs(sum(t["return_pct"] for t in losers))
-    profit_factor = round(gp / gl, 2) if gl > 0 else float("inf")
 
-    ann  = _ANNUALIZATION.get(interval, 252)
+    # No losing trades means the ratio is undefined, not infinite. float("inf")
+    # serialises as the bare token `Infinity`, which is not valid JSON — a
+    # strict client fails to decode the whole tool response, not just this key.
+    profit_factor = round(gp / gl, 2) if gl > 0 else None
+
+    # Per-trade returns annualise by trade frequency, not by bar count.
+    factor = _trades_per_year(trades, interval)
     sharpe = 0.0
-    if len(returns) > 1:
+    if len(returns) > 1 and factor > 0:
         mean_r = statistics.mean(returns)
         std_r  = statistics.stdev(returns)
         if std_r > 0:
-            sharpe = round((mean_r - 0.04 / ann) / std_r * math.sqrt(ann), 2)
+            sharpe = round((mean_r - 0.04 / factor) / std_r * math.sqrt(factor), 2)
 
     calmar = round(total_return / max_dd, 2) if max_dd > 0 else 0.0
 
@@ -414,6 +505,7 @@ def _calc_metrics(trades: list[dict], initial_capital: float, interval: str = "1
         "avg_loss_pct":     round(avg_loss, 2),
         "max_drawdown_pct": round(-max_dd, 2),
         "profit_factor":    profit_factor,
+        "no_losing_trades": profit_factor is None,
         "sharpe_ratio":     sharpe,
         "calmar_ratio":     calmar,
         "expectancy_pct":   expectancy,
@@ -507,7 +599,7 @@ def run_backtest(
 
     raw_trades = _STRATEGY_MAP[strategy](candles)
     trades     = _apply_costs(raw_trades, commission_pct, slippage_pct)
-    metrics    = _calc_metrics(trades, initial_capital, interval)
+    metrics    = _calc_metrics(trades, initial_capital, interval, candles)
     bnh        = _buy_and_hold_return(candles)
 
     result = {
@@ -575,7 +667,7 @@ def compare_strategies(
     for strat, fn in _STRATEGY_MAP.items():
         raw    = fn(candles)
         trades = _apply_costs(raw, commission_pct, slippage_pct)
-        m      = _calc_metrics(trades, initial_capital, interval)
+        m      = _calc_metrics(trades, initial_capital, interval, candles)
         results.append({
             "strategy":         strat,
             "strategy_label":   _STRATEGY_LABELS[strat],
@@ -622,6 +714,33 @@ def compare_strategies(
 
 
 # ─── Public API: walk_forward_backtest ────────────────────────────────────────
+
+def _fold_robustness(train_m: dict, test_m: dict) -> float:
+    """Score one walk-forward fold: how well in-sample performance held up.
+
+    ``1.0`` means out-of-sample matched in-sample; below ``0.2`` the caller
+    reports OVERFITTED. Capped at ``2.0`` so one lucky fold cannot carry the
+    average, and floored at ``-1.0`` so one blow-up cannot sink it.
+
+    A fold earns ``0.0`` — not a ratio — whenever there is nothing to validate:
+
+    * Either window produced no trades. A strategy that never fires has not
+      demonstrated robustness, and ``0 / 0`` is not evidence of consistency.
+    * The strategy lost money in-sample. There is no edge to generalise, so
+      out-of-sample behaviour cannot confirm one. Dividing two negative returns
+      would yield a *positive* ratio here, scoring a strategy that lost more
+      out-of-sample as maximally robust — the exact inversion this function
+      exists to prevent.
+    """
+    if train_m["total_trades"] == 0 or test_m["total_trades"] == 0:
+        return 0.0
+
+    train_return = train_m["total_return_pct"]
+    if train_return <= 0:
+        return 0.0
+
+    return round(max(min(test_m["total_return_pct"] / train_return, 2.0), -1.0), 2)
+
 
 def walk_forward_backtest(
     symbol: str,
@@ -700,20 +819,12 @@ def walk_forward_backtest(
 
         train_t = _apply_costs(fn(train_c), commission_pct, slippage_pct)
         test_t  = _apply_costs(fn(test_c),  commission_pct, slippage_pct)
-        train_m = _calc_metrics(train_t, initial_capital, interval)
-        test_m  = _calc_metrics(test_t,  initial_capital, interval)
+        train_m = _calc_metrics(train_t, initial_capital, interval, train_c)
+        test_m  = _calc_metrics(test_t,  initial_capital, interval, test_c)
 
         all_test_trades.extend(test_t)
 
-        tr, te = train_m["total_return_pct"], test_m["total_return_pct"]
-        if tr == 0:
-            fold_rob = 1.0 if te == 0 else 0.0
-        elif tr < 0 and te < 0:
-            fold_rob = round(min(te / tr, 2.0), 2)
-        elif tr < 0:
-            fold_rob = 0.0
-        else:
-            fold_rob = round(max(min(te / tr, 2.0), -1.0), 2)
+        fold_rob = _fold_robustness(train_m, test_m)
 
         folds.append({
             "fold":                  fold_i + 1,
@@ -738,7 +849,7 @@ def walk_forward_backtest(
     avg_train  = round(statistics.mean(f["train_return_pct"] for f in folds), 2)
     avg_test   = round(statistics.mean(f["test_return_pct"]  for f in folds), 2)
     avg_robust = round(statistics.mean(f["fold_robustness_score"] for f in folds), 2)
-    oos_m      = _calc_metrics(all_test_trades, initial_capital, interval)
+    oos_m      = _calc_metrics(all_test_trades, initial_capital, interval, candles)
 
     if avg_robust >= 0.8:
         verdict = "ROBUST — strategy performs consistently in-sample and out-of-sample"

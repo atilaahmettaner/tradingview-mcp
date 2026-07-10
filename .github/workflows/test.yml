@@ -1,0 +1,53 @@
+# Run the hermetic unit suite.
+#
+# Callable from other workflows (see publish-image.yml) so that no image is
+# ever pushed from a commit whose tests do not pass.
+#
+# The real-network stress suite is excluded by the `-m "not stress"` default in
+# pyproject.toml and is not run here.
+
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:      # publish-image.yml calls this on pushes to main
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirrors requires-python = ">=3.10,<3.14" in pyproject.toml.
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install the package and test deps
+        # Editable install, not PYTHONPATH: a bare `pytest` cannot import
+        # tradingview_mcp otherwise, and the suite would appear to pass by
+        # collecting nothing.
+        run: uv pip install --system -e . pytest pytest-asyncio
+
+      - name: Verify the suite actually collected
+        # A misconfigured import makes pytest collect nothing and exit green.
+        run: |
+          python -m pytest tests/unit --collect-only -q | tee /tmp/collected.txt | tail -1
+          grep -qE '[0-9]+ tests? collected' /tmp/collected.txt || {
+            echo "::error::pytest collected no tests — a green run here would be meaningless"
+            exit 1
+          }
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit -q
