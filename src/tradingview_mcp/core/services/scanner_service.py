@@ -145,11 +145,13 @@ def volume_breakout_scan(
 
                 price_change = ((close - open_price) / open_price) * 100 if open_price > 0 else 0
 
-                if sma20_volume and sma20_volume > 0:
-                    volume_ratio = volume / sma20_volume
-                else:
-                    avg_estimate = volume / 2
-                    volume_ratio = volume / avg_estimate if avg_estimate > 0 else 1
+                # Without an average to compare against there is no ratio. The
+                # old fallback estimated the average as volume/2, which made the
+                # ratio exactly 2.0 — passing the default 2.0 threshold for every
+                # symbol whose average volume upstream happened to omit.
+                if not sma20_volume or sma20_volume <= 0:
+                    continue
+                volume_ratio = volume / sma20_volume
 
                 if abs(price_change) >= price_change_min and volume_ratio >= volume_multiplier:
                     rsi = ind.get("RSI", 50)
