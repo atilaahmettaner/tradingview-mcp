@@ -33,7 +33,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # No image reaches GHCR from a commit whose tests fail.
+  test:
+    uses: ./.github/workflows/test.yml
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
