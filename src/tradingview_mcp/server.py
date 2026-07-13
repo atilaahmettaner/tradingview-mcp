@@ -985,7 +985,7 @@ async def stock_screener(
         country: TradingView market name — e.g. america, korea, germany,
             brazil, japan, uk, india, turkey, canada, australia, france, hongkong
         stock_type: common | preferred
-        limit: rows to return (max 100), ranked by market cap descending
+        limit: rows to return (max 1000, single upstream request), ranked by market cap descending
 
     Returns:
         Envelope dict: total_matches (market-wide count), returned, and rows
@@ -1012,7 +1012,8 @@ async def stock_prices(tickers: str) -> dict:
     """Current price + daily % change for specific stock symbols.
 
     Args:
-        tickers: comma-separated EXCHANGE:SYMBOL list (max 50), e.g.
+        tickers: comma-separated EXCHANGE:SYMBOL list (max 1000 — one
+            upstream request even at full size), e.g.
             "NASDAQ:NVDA, NASDAQ:TSLA, KRX:005930". The exchange prefix is
             required — the scanner's direct-ticker lookup is exchange-scoped.
 

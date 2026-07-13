@@ -43,8 +43,8 @@ _SCREEN_COLUMNS = (
 
 _PRICE_COLUMNS = ("name", "description", "exchange", "close", "currency", "change")
 
-MAX_SCREEN_LIMIT = 100
-MAX_PRICE_TICKERS = 50
+MAX_SCREEN_LIMIT = 1000
+MAX_PRICE_TICKERS = 1000
 
 
 def _clean(value: Any) -> Any:
@@ -136,7 +136,11 @@ def fetch_stock_prices(tickers: str) -> dict[str, Any]:
             f"invalid: {malformed}"
         )
 
-    query = Query().set_tickers(*parsed).select(*_PRICE_COLUMNS)
+    # .limit() is load-bearing: the scanner's default page size is 50, so
+    # without it a 1,000-ticker request silently returns only 50 rows
+    # (measured live 2026-07-14). With it, 1,000 prices come back in one
+    # HTTP request in ~0.5s.
+    query = Query().set_tickers(*parsed).select(*_PRICE_COLUMNS).limit(len(parsed))
     _total, df = query.get_scanner_data()
     found: dict[str, dict[str, Any]] = {}
     for r in df.to_dict("records"):
