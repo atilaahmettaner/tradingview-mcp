@@ -390,6 +390,15 @@ Example prompt: "Compare all 9 strategies on MSFT for 2 years"
 
 ---
 
+### 🌍 Global Stock Screener — Common & Preferred Shares
+
+| Tool | Description |
+|------|-------------|
+| `stock_screener` | List common or preferred stocks for any TradingView country market (america, korea, germany, brazil, …) with price, currency, % change, dividend yield — ranked by market cap. The API twin of TradingView's "Common stock" / "Preferred stock" symbol-search filter. |
+| `stock_prices` | Direct price lookup for specific symbols (comma-separated `EXCHANGE:SYMBOL`, e.g. `NASDAQ:NVDA, KRX:005930`) — price, currency, daily % change, with unrecognized tickers named in `not_found`. |
+
+---
+
 ### 🧠 AI Sentiment & Intelligence
 
 | Tool | Description |

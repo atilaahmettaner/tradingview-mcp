@@ -67,6 +67,11 @@ from tradingview_mcp.core.services.futures_service import (
     get_futures_category_snapshot,
     get_futures_watchlist,
 )
+from tradingview_mcp.core.services.stock_screener_service import (
+    EXAMPLE_MARKETS,
+    fetch_stock_prices,
+    screen_stocks,
+)
 from tradingview_mcp.core.services.backtest_service import (
     run_backtest,
     compare_strategies as _compare_strategies,
@@ -967,6 +972,61 @@ def futures_watchlist() -> dict:
     Use these symbols with futures_category_snapshot or coin_analysis for deeper analysis.
     """
     return get_futures_watchlist()
+
+
+@mcp.tool()
+async def stock_screener(
+    country: str = "america", stock_type: str = "common", limit: int = 50
+) -> dict:
+    """Screen stocks by share type — the API twin of TradingView's
+    "Common stock" / "Preferred stock" symbol-search filter.
+
+    Args:
+        country: TradingView market name — e.g. america, korea, germany,
+            brazil, japan, uk, india, turkey, canada, australia, france, hongkong
+        stock_type: common | preferred
+        limit: rows to return (max 100), ranked by market cap descending
+
+    Returns:
+        Envelope dict: total_matches (market-wide count), returned, and rows
+        of {ticker, symbol, description, exchange, price, currency,
+        change_percent, dividend_yield, market_cap}. Prices are in the
+        market's local currency (e.g. KRW for korea).
+    """
+    try:
+        # tradingview-screener is sync (urllib) — off-load to a worker thread
+        # so the event loop stays free for concurrent tool calls.
+        return await asyncio.to_thread(screen_stocks, country, stock_type, limit)
+    except ValueError as e:
+        return make_error(ErrorCode.INVALID_PARAMETER, str(e))
+    except Exception as e:
+        return make_error(
+            ErrorCode.UPSTREAM_ERROR,
+            f"scan failed for market {country!r}: {e}",
+            known_good_markets=list(EXAMPLE_MARKETS),
+        )
+
+
+@mcp.tool()
+async def stock_prices(tickers: str) -> dict:
+    """Current price + daily % change for specific stock symbols.
+
+    Args:
+        tickers: comma-separated EXCHANGE:SYMBOL list (max 50), e.g.
+            "NASDAQ:NVDA, NASDAQ:TSLA, KRX:005930". The exchange prefix is
+            required — the scanner's direct-ticker lookup is exchange-scoped.
+
+    Returns:
+        Envelope dict: rows of {ticker, symbol, description, exchange, price,
+        currency, change_percent} plus a not_found list naming any requested
+        ticker the scanner didn't recognize.
+    """
+    try:
+        return await asyncio.to_thread(fetch_stock_prices, tickers)
+    except ValueError as e:
+        return make_error(ErrorCode.INVALID_PARAMETER, str(e))
+    except Exception as e:
+        return make_error(ErrorCode.UPSTREAM_ERROR, f"price lookup failed: {e}")
 
 
 # ── Resource ───────────────────────────────────────────────────────────────────
