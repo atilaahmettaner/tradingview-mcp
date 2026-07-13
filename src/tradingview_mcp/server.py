@@ -976,7 +976,11 @@ def futures_watchlist() -> dict:
 
 @mcp.tool()
 async def stock_screener(
-    country: str = "america", stock_type: str = "common", limit: int = 50
+    country: str = "america",
+    stock_type: str = "common",
+    limit: int = 50,
+    exclude_otc: bool = True,
+    compact: bool = False,
 ) -> dict:
     """Screen stocks by share type — the API twin of TradingView's
     "Common stock" / "Preferred stock" symbol-search filter.
@@ -985,7 +989,11 @@ async def stock_screener(
         country: TradingView market name — e.g. america, korea, germany,
             brazil, japan, uk, india, turkey, canada, australia, france, hongkong
         stock_type: common | preferred
-        limit: rows to return (max 1000, single upstream request), ranked by market cap descending
+        limit: rows to return (max 2000, single upstream request), ranked by market cap descending
+        exclude_otc: default True — drop OTC listings (foreign companies traded
+            over-the-counter); "america" otherwise means "US venue", not "US company"
+        compact: default False — True returns only ticker/symbol/price/currency/
+            change_percent per row (light payload for bulk price feeds)
 
     Returns:
         Envelope dict: total_matches (market-wide count), returned, and rows
@@ -996,7 +1004,9 @@ async def stock_screener(
     try:
         # tradingview-screener is sync (urllib) — off-load to a worker thread
         # so the event loop stays free for concurrent tool calls.
-        return await asyncio.to_thread(screen_stocks, country, stock_type, limit)
+        return await asyncio.to_thread(
+            screen_stocks, country, stock_type, limit, exclude_otc, compact
+        )
     except ValueError as e:
         return make_error(ErrorCode.INVALID_PARAMETER, str(e))
     except Exception as e:
@@ -1012,7 +1022,7 @@ async def stock_prices(tickers: str) -> dict:
     """Current price + daily % change for specific stock symbols.
 
     Args:
-        tickers: comma-separated EXCHANGE:SYMBOL list (max 1000 — one
+        tickers: comma-separated EXCHANGE:SYMBOL list (max 2000 — one
             upstream request even at full size), e.g.
             "NASDAQ:NVDA, NASDAQ:TSLA, KRX:005930". The exchange prefix is
             required — the scanner's direct-ticker lookup is exchange-scoped.

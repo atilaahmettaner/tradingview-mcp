@@ -43,8 +43,8 @@ _SCREEN_COLUMNS = (
 
 _PRICE_COLUMNS = ("name", "description", "exchange", "close", "currency", "change")
 
-MAX_SCREEN_LIMIT = 1000
-MAX_PRICE_TICKERS = 1000
+MAX_SCREEN_LIMIT = 2000
+MAX_PRICE_TICKERS = 2000
 
 
 def _clean(value: Any) -> Any:
@@ -66,11 +66,31 @@ def screen_stocks(
     country: str = "america",
     stock_type: str = "common",
     limit: int = 50,
+    exclude_otc: bool = True,
+    compact: bool = False,
 ) -> dict[str, Any]:
     """Screen stocks of one share type for a country market.
 
     Returns an envelope: total_matches is the market-wide count, rows are the
     top-N by market cap.
+
+    exclude_otc (default True): TradingView's 'america' market means "trades
+    on a US venue", not "is a US company" — without this filter ~1/3 of the
+    top-100 is OTC foreign listings (Tencent, Roche, Nestlé...). Field-tested
+    on day one: a user asking for "the biggest 100 US stocks" got 29 OTC rows.
+    Pass exclude_otc=False to include them.
+
+    compact (default False): True trims rows to ticker/symbol/price/currency/
+    change_percent — for price-feed consumers pulling 1,000+ rows where the
+    full envelope is mostly dead weight.
+
+    Deliberately NOT deduplicated across share classes (GOOG/GOOGL, BRK.A/
+    BRK.B): those are distinct instruments with distinct real prices, and
+    which one is "canonical" is a consumer-side decision, not a data-layer one.
+
+    change_percent can be null (fresh listings before their first full
+    session, e.g. SKHY on IPO day). Deliberately NOT defaulted to 0 — "no
+    change data" and "0% change" are different facts; null-check downstream.
     """
     _require_available()
     stock_type = (stock_type or "common").strip().lower()
@@ -81,11 +101,14 @@ def screen_stocks(
     country = (country or "america").strip().lower()
     limit = max(1, min(int(limit), MAX_SCREEN_LIMIT))
 
+    filters = [col("type") == "stock", col("typespecs").has([stock_type])]
+    if exclude_otc:
+        filters.append(col("exchange") != "OTC")
     query = (
         Query()
         .set_markets(country)
         .select(*_SCREEN_COLUMNS)
-        .where(col("type") == "stock", col("typespecs").has([stock_type]))
+        .where(*filters)
         .order_by("market_cap_basic", ascending=False)
         .limit(limit)
     )
@@ -104,9 +127,13 @@ def screen_stocks(
         }
         for r in df.to_dict("records")
     ]
+    if compact:
+        keep = ("ticker", "symbol", "price", "currency", "change_percent")
+        rows = [{k: r[k] for k in keep} for r in rows]
     return {
         "country": country,
         "stock_type": stock_type,
+        "exclude_otc": exclude_otc,
         "total_matches": total,
         "returned": len(rows),
         "rows": rows,
