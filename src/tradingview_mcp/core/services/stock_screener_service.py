@@ -37,11 +37,14 @@ EXAMPLE_MARKETS = (
 )
 
 _SCREEN_COLUMNS = (
-    "name", "description", "exchange", "close", "currency",
-    "change", "dividends_yield_current", "market_cap_basic",
+    "name", "description", "exchange", "open", "high", "low", "close",
+    "currency", "change", "dividends_yield_current", "market_cap_basic",
 )
 
-_PRICE_COLUMNS = ("name", "description", "exchange", "close", "currency", "change")
+_PRICE_COLUMNS = (
+    "name", "description", "exchange", "open", "high", "low", "close",
+    "currency", "change",
+)
 
 MAX_SCREEN_LIMIT = 2000
 MAX_PRICE_TICKERS = 2000
@@ -120,6 +123,9 @@ def screen_stocks(
             "description": _clean(r.get("description")),
             "exchange": _clean(r.get("exchange")),
             "price": _clean(r.get("close")),
+            "open": _clean(r.get("open")),
+            "high": _clean(r.get("high")),
+            "low": _clean(r.get("low")),
             "currency": _clean(r.get("currency")),
             "change_percent": _clean(r.get("change")),
             "dividend_yield": _clean(r.get("dividends_yield_current")),
@@ -177,6 +183,9 @@ def fetch_stock_prices(tickers: str) -> dict[str, Any]:
             "description": _clean(r.get("description")),
             "exchange": _clean(r.get("exchange")),
             "price": _clean(r.get("close")),
+            "open": _clean(r.get("open")),
+            "high": _clean(r.get("high")),
+            "low": _clean(r.get("low")),
             "currency": _clean(r.get("currency")),
             "change_percent": _clean(r.get("change")),
         }

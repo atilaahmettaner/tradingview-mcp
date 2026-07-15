@@ -997,8 +997,9 @@ async def stock_screener(
 
     Returns:
         Envelope dict: total_matches (market-wide count), returned, and rows
-        of {ticker, symbol, description, exchange, price, currency,
-        change_percent, dividend_yield, market_cap}. Prices are in the
+        of {ticker, symbol, description, exchange, price, open, high, low,
+        currency, change_percent, dividend_yield, market_cap} — price is the
+        current/last close; open/high/low are the current session's daily bar. Prices are in the
         market's local currency (e.g. KRW for korea).
     """
     try:
@@ -1029,7 +1030,7 @@ async def stock_prices(tickers: str) -> dict:
 
     Returns:
         Envelope dict: rows of {ticker, symbol, description, exchange, price,
-        currency, change_percent} plus a not_found list naming any requested
+        open, high, low, currency, change_percent} plus a not_found list naming any requested
         ticker the scanner didn't recognize.
     """
     try:
