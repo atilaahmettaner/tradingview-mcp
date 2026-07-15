@@ -49,6 +49,17 @@ _PRICE_COLUMNS = (
 MAX_SCREEN_LIMIT = 2000
 MAX_PRICE_TICKERS = 2000
 
+# sort_by -> scanner column. Every entry must also be in _SCREEN_COLUMNS.
+# Field-tested motivation: without a server-side sort, "top dividend payers"
+# can only be computed inside the market-cap-ranked window the caller pulled —
+# the real leaders in the long tail stay invisible.
+SORT_FIELDS = {
+    "market_cap": "market_cap_basic",
+    "dividend_yield": "dividends_yield_current",
+    "change": "change",
+    "price": "close",
+}
+
 
 def _clean(value: Any) -> Any:
     """NaN -> None so rows serialize to JSON cleanly."""
@@ -71,11 +82,14 @@ def screen_stocks(
     limit: int = 50,
     exclude_otc: bool = True,
     compact: bool = False,
+    sort_by: str = "market_cap",
 ) -> dict[str, Any]:
     """Screen stocks of one share type for a country market.
 
     Returns an envelope: total_matches is the market-wide count, rows are the
-    top-N by market cap.
+    top-N by sort_by (market_cap | dividend_yield | change | price — always
+    descending, server-side, so the ranking covers the WHOLE market, not just
+    the window the caller happened to pull).
 
     exclude_otc (default True): TradingView's 'america' market means "trades
     on a US venue", not "is a US company" — without this filter ~1/3 of the
@@ -90,6 +104,11 @@ def screen_stocks(
     Deliberately NOT deduplicated across share classes (GOOG/GOOGL, BRK.A/
     BRK.B): those are distinct instruments with distinct real prices, and
     which one is "canonical" is a consumer-side decision, not a data-layer one.
+    Known limitation in the same family: exchange-specific quotation lines
+    (e.g. ASX deferred-settlement tickers like MTSCD next to MTS) carry
+    type=stock + typespecs=[common] and are indistinguishable in scanner
+    fields — filtering them by ticker-suffix heuristics would risk false
+    positives on real symbols, so they are passed through as-is.
 
     change_percent can be null (fresh listings before their first full
     session, e.g. SKHY on IPO day). Deliberately NOT defaulted to 0 — "no
@@ -103,6 +122,11 @@ def screen_stocks(
         )
     country = (country or "america").strip().lower()
     limit = max(1, min(int(limit), MAX_SCREEN_LIMIT))
+    sort_col = SORT_FIELDS.get((sort_by or "market_cap").strip().lower())
+    if not sort_col:
+        raise ValueError(
+            f"sort_by must be one of {list(SORT_FIELDS)}, got {sort_by!r}"
+        )
 
     filters = [col("type") == "stock", col("typespecs").has([stock_type])]
     if exclude_otc:
@@ -112,7 +136,7 @@ def screen_stocks(
         .set_markets(country)
         .select(*_SCREEN_COLUMNS)
         .where(*filters)
-        .order_by("market_cap_basic", ascending=False)
+        .order_by(sort_col, ascending=False)
         .limit(limit)
     )
     total, df = query.get_scanner_data()
@@ -140,6 +164,7 @@ def screen_stocks(
         "country": country,
         "stock_type": stock_type,
         "exclude_otc": exclude_otc,
+        "sort_by": sort_by,
         "total_matches": total,
         "returned": len(rows),
         "rows": rows,

@@ -981,6 +981,7 @@ async def stock_screener(
     limit: int = 50,
     exclude_otc: bool = True,
     compact: bool = False,
+    sort_by: str = "market_cap",
 ) -> dict:
     """Screen stocks by share type — the API twin of TradingView's
     "Common stock" / "Preferred stock" symbol-search filter.
@@ -994,6 +995,10 @@ async def stock_screener(
             over-the-counter); "america" otherwise means "US venue", not "US company"
         compact: default False — True returns only ticker/symbol/price/currency/
             change_percent per row (light payload for bulk price feeds)
+        sort_by: market_cap (default) | dividend_yield | change | price —
+            server-side descending sort over the WHOLE market, so e.g.
+            sort_by=dividend_yield with limit=20 is the market's true top-20
+            dividend payers, not just the biggest companies re-sorted
 
     Returns:
         Envelope dict: total_matches (market-wide count), returned, and rows
@@ -1006,7 +1011,7 @@ async def stock_screener(
         # tradingview-screener is sync (urllib) — off-load to a worker thread
         # so the event loop stays free for concurrent tool calls.
         return await asyncio.to_thread(
-            screen_stocks, country, stock_type, limit, exclude_otc, compact
+            screen_stocks, country, stock_type, limit, exclude_otc, compact, sort_by
         )
     except ValueError as e:
         return make_error(ErrorCode.INVALID_PARAMETER, str(e))
