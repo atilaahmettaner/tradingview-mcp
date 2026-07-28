@@ -1,5 +1,7 @@
 # TradingView MCP Market Data & Technical Analysis for AI Assistants
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fatilaahmettaner%2Ftradingview-mcp.svg)](https://mcptoplist.com/server/glama%2Fatilaahmettaner%2Ftradingview-mcp)
+
 <a href="https://trendshift.io/repositories/25110" target="_blank"><img src="https://trendshift.io/api/badge/repositories/25110" alt="atilaahmettaner%2Ftradingview-mcp | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 **TradingView MCP server** — real-time market data, technical indicators, screeners, and backtesting for Claude, ChatGPT, Cursor, Copilot, and any MCP client. Stocks, crypto, forex & futures across global exchanges.
