@@ -958,7 +958,7 @@ wheels = [
 
 [[package]]
 name = "tradingview-mcp-server"
-version = "0.7.1"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "feedparser" },
@@ -979,7 +979,7 @@ dev = [
 requires-dist = [
     { name = "feedparser", specifier = ">=6.0.12" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.12.0" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.12.0,<2" },
     { name = "requests", specifier = ">=2.32" },
     { name = "tradingview-screener", specifier = "==3.0.0" },
     { name = "tradingview-ta", specifier = ">=3.3.0" },

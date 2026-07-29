@@ -1,6 +1,6 @@
 [project]
 name = "tradingview-mcp-server"
-version = "0.7.1"
+version = "0.8.0"
 description = "Advanced AI Trading Intelligence Framework — MCP server with walk-forward backtesting, trade logs, equity curves, 1h timeframe, sentiment, Yahoo Finance, and 30+ technical analysis tools"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -20,7 +20,12 @@ classifiers = [
 dependencies = [
   "feedparser>=6.0.12",
   "httpx>=0.27",
-  "mcp[cli]>=1.12.0",
+  # Capped below 2. mcp 2.0.0 (2026-07-28, the stateless-spec SDK rework)
+  # removes the `mcp.server.fastmcp` module our server imports, so an open
+  # range breaks every fresh install (and any Docker rebuild — `uv pip
+  # install --system .` ignores uv.lock). Moving to the 2.x SDK
+  # (FastMCP -> MCPServer) is a deliberate migration, not a drive-by resolve.
+  "mcp[cli]>=1.12.0,<2",
   "requests>=2.32",
   # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
   # *stock* preset filter that silently returns 0 rows for crypto/futures
