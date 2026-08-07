@@ -1089,6 +1089,12 @@ def _offload_sync_tools() -> int:
 
 _OFFLOADED_TOOL_COUNT = _offload_sync_tools()
 
+# Interactive chart App (MCP Apps extension) — registered after the offload
+# pass on purpose: price_chart is async and manages its own thread offload.
+from .chart_app import register_chart_app  # noqa: E402
+
+register_chart_app(mcp)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TradingView Screener MCP server")
