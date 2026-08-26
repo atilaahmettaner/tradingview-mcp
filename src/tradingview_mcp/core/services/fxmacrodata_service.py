@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import httpx
 
-FXMACRODATA_BASE_URL = "https://fxmacrodata.com/api/v1"
+FXMACRODATA_BASE_URL = "https://api.fxmacrodata.com/v1"
 
 
 async def get_release_calendar(
