@@ -340,6 +340,7 @@ OpenRouter is **not required** — use whichever provider you have a key for:
 | Provider | Model ID for OpenClaw | Get Key |
 |----------|----------------------|---------|
 | **OpenRouter** (aggregator — access to all models) | `openrouter/google/gemini-3-flash-preview` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| **OrcaRouter** (OpenRouter-compatible aggregator — one key for Claude, GPT & Gemini) | `orcarouter/openai/gpt-5.5` | [orcarouter.ai](https://www.orcarouter.ai) |
 | **Anthropic** (Claude direct) | `anthropic/claude-sonnet-4-5` | [console.anthropic.com](https://console.anthropic.com) |
 | **Google** (Gemini direct) | `google/gemini-2.5-flash` | [aistudio.google.com](https://aistudio.google.com) |
 | **OpenAI** (GPT direct) | `openai/gpt-4o-mini` | [platform.openai.com](https://platform.openai.com) |
@@ -347,11 +348,12 @@ OpenRouter is **not required** — use whichever provider you have a key for:
 ```bash
 # Examples — set your chosen model:
 openclaw config set agents.defaults.model "openrouter/google/gemini-3-flash-preview"  # via OpenRouter
+openclaw config set agents.defaults.model "orcarouter/openai/gpt-5.5"                 # via OrcaRouter
 openclaw config set agents.defaults.model "anthropic/claude-sonnet-4-5"               # Anthropic direct
 openclaw config set agents.defaults.model "google/gemini-2.5-flash"                   # Google direct
 ```
 
-> ⚠️ **Important:** Prefix must match your provider. `google/...` needs a Google API key. `openrouter/...` needs an OpenRouter key.
+> ⚠️ **Important:** Prefix must match your provider. `google/...` needs a Google API key. `openrouter/...` needs an OpenRouter key. For `orcarouter/...`, register the provider first — see [OPENCLAW.md](OPENCLAW.md) Step 4e.
 
 ### ⚠️ Common Mistakes
 

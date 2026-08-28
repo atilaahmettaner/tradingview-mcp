@@ -119,6 +119,32 @@ print('✅ API key also written to models.json')
 
 > **Note:** Replace `YOUR_KEY_HERE` with your actual OpenRouter key in both commands above.
 
+**Step 4e — Alternative: use OrcaRouter instead**
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenRouter-compatible aggregator — one API key gives you access to Claude, GPT, Gemini and more. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
+
+1. Go to [orcarouter.ai](https://www.orcarouter.ai) and create a key (it starts with `sk-orca-`).
+2. Add OrcaRouter as a provider and point the agent at it (replace `YOUR_KEY_HERE` with your actual key):
+
+```bash
+python3 -c "
+import json
+with open('/root/.openclaw/openclaw.json', 'r') as f:
+    cfg = json.load(f)
+cfg.setdefault('models', {}).setdefault('providers', {})['orcarouter'] = {
+    'baseUrl': 'https://api.orcarouter.ai/v1',
+    'apiKey': 'YOUR_KEY_HERE',
+    'api': 'openai-completions',
+}
+cfg.setdefault('agents', {}).setdefault('defaults', {})['model'] = 'orcarouter/openai/gpt-5.5'
+with open('/root/.openclaw/openclaw.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('✅ OrcaRouter provider configured')
+"
+```
+
+3. Skip steps 4c–4d above — the OrcaRouter key is already in place.
+
 ### 5. Restart OpenClaw
 
 ```bash
