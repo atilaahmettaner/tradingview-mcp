@@ -1,6 +1,6 @@
 [project]
 name = "tradingview-mcp-server"
-version = "0.8.1"
+version = "0.9.0"
 description = "Advanced AI Trading Intelligence Framework — MCP server with walk-forward backtesting, trade logs, equity curves, 1h timeframe, sentiment, Yahoo Finance, and 30+ technical analysis tools"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -30,6 +30,12 @@ dependencies = [
   # `uv pip install --system .` ignores uv.lock). Moving to the 2.x SDK
   # (FastMCP -> MCPServer) is a deliberate migration, not a drive-by resolve.
   "mcp[cli]>=1.14.0,<2",
+  # Declared directly, not just inherited via tradingview-screener: server.py
+  # imports pandas at module top (the issue #91 preload). If the screener pin
+  # ever changes or drops pandas, an undeclared transitive dep would break
+  # every install at import time — the exact failure mode the two pins above
+  # exist to prevent.
+  "pandas>=2",
   "requests>=2.32",
   # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
   # *stock* preset filter that silently returns 0 rows for crypto/futures

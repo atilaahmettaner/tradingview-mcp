@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import random
+import urllib.parse
 import urllib.request
 from typing import Optional
 
@@ -36,6 +37,21 @@ except ImportError:
 
 # ─── Read config from env ─────────────────────────────────────────────────────
 
+def _env_int(name: str, default: int) -> int:
+    """Read an int env var; a malformed value falls back with a stderr note
+    instead of raising ValueError out of every proxied request."""
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        import sys
+        print(f"[tradingview_mcp] ignoring non-numeric {name}={raw!r}, "
+              f"using {default}", file=sys.stderr)
+        return default
+
+
 def _cfg() -> dict:
     return {
         "host":    os.environ.get("PROXY_HOST", "p.webshare.io"),
@@ -43,8 +59,8 @@ def _cfg() -> dict:
         "prefix":  os.environ.get("PROXY_USERNAME_PREFIX", ""),
         "password": os.environ.get("PROXY_PASSWORD", ""),
         "enabled": os.environ.get("PROXY_ENABLED", "true").lower() == "true",
-        "min":     int(os.environ.get("PROXY_SESSION_MIN", "1")),
-        "max":     int(os.environ.get("PROXY_SESSION_MAX", "250")),
+        "min":     _env_int("PROXY_SESSION_MIN", 1),
+        "max":     _env_int("PROXY_SESSION_MAX", 250),
     }
 
 
@@ -60,7 +76,11 @@ def get_proxy_url() -> Optional[str]:
         return None
     c = _cfg()
     session_id = random.randint(c["min"], c["max"])
-    return f"http://{c['prefix']}-{session_id}:{c['password']}@{c['host']}:{c['port']}"
+    # URL-encode credentials: a password containing @ : / or # would
+    # otherwise produce a proxy URL that parses to the wrong host/auth.
+    user = urllib.parse.quote(f"{c['prefix']}-{session_id}", safe="")
+    pwd = urllib.parse.quote(c["password"], safe="")
+    return f"http://{user}:{pwd}@{c['host']}:{c['port']}"
 
 
 def get_proxy() -> Optional[dict]:
@@ -96,8 +116,9 @@ def build_opener_with_proxy(
 
     proxy_url = get_proxy_url()
     c = _cfg()
-    # Extract username from the full url for auth handler
-    username = proxy_url.split("//")[1].split(":")[0]
+    # Extract username from the full url for auth handler (unquote — the URL
+    # form is percent-encoded; the password manager wants the raw value).
+    username = urllib.parse.unquote(proxy_url.split("//")[1].split(":")[0])
 
     proxy_handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
     pwd_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()

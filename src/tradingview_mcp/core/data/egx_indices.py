@@ -7,6 +7,12 @@ Defines the constituent stocks for the main EGX indices:
 - SHARIAH33: Shariah-compliant index (34 stocks)
 - EGX35-LV: Low Volatility index (35 stocks)
 - TAMAYUZ: Small/micro-cap emerging companies index (5 stocks)
+
+Constituents validated against the live TradingView egypt-market listing
+on 2026-08-26 (dead symbols pruned). Index membership itself follows the
+EGX semi-annual reviews (Feb/Aug) and must be updated from egx.com.eg
+announcements — the scanner can verify a symbol exists, not which index
+it belongs to.
 """
 from __future__ import annotations
 from typing import Dict, List
@@ -20,15 +26,17 @@ EGX30_CONSTITUENTS: List[str] = [
     "AMOC",   # Alexandria Mineral Oils Company
     "COMI",   # Commercial International Bank (CIB)
     "EAST",   # Eastern Company
-    "EGCH",   # KIMA (El Nasr Chemicals)
     "RMDA",   # Rameda
-    "ARCC",   # Arabian Cement
     "CCAP",   # Qalaa Holdings
     "ETEL",   # Telecom Egypt
-    "ORWE",   # Oriental Weavers
     "ORAS",   # Orascom Construction
-    "OIH",    # Orascom Investment Holding
     "ORHD",   # Orascom Development Egypt
+    # 2026-08 review: EGCH, ARCC, ORWE, OIH demoted to EGX70; MFPC, ALCN,
+    # SKPC, CLHO promoted in.
+    "MFPC",   # Misr Fertilizers Production Company (MOPCO)
+    "ALCN",   # Alexandria Container & Cargo Handling
+    "SKPC",   # Sidi Kerir Petrochemicals (SIDPEC)
+    "CLHO",   # Cleopatra Hospitals Group
     "EFIH",   # e-finance Investment Group
     "EFID",   # Edita Food Industries
     "PHDC",   # Palm Hills Development
@@ -52,13 +60,13 @@ EGX70_CONSTITUENTS: List[str] = [
     "AMER",   # Amer Group
     "ATLC",   # AT Lease
     "TALM",   # Taaleem Management Services
-    "AIHC",   # Arabia Investments Holding
+    # "AIHC" (Arabia Investments Holding) removed 2026-08-26 — no longer
+    # returned by the TradingView scanner (delisted/suspended).
     "AIDC",   # Arabia Investment & Development
     "ASPI",   # Aspire Capital Holding
     "SCEM",   # Sinai Cement
     "ASCM",   # ASCOM Mining
     "ACTF",   # Act Financial
-    "ALCN",   # Alexandria Container & Cargo Handling
     "IDRE",   # Ismailia New Development
     "ISMA",   # Ismailia Misr Poultry
     "AFDI",   # Al Ahly Development & Investment
@@ -104,7 +112,6 @@ EGX70_CONSTITUENTS: List[str] = [
     "RACC",   # Raya Contact Center
     "ZMID",   # Zahraa Maadi Investment
     "SIPC",   # Saba International Pharma
-    "SKPC",   # SIDPEC
     "SDTI",   # Sharm Dreams
     "NCCW",   # Nasr Civil Works
     "TAQA",   # TAQA Arabia
@@ -113,12 +120,17 @@ EGX70_CONSTITUENTS: List[str] = [
     "MCRO",   # Macro Group
     "MASR",   # Madinet Masr
     "ATQA",   # Attaka Steel
-    "MFPC",   # Mopco
     "AFMC",   # Alexandria Mills
     "MPCI",   # Memphis Pharma
     "KRDI",   # Nile Agriculture Development
     "VALU",   # valU Consumer Finance
     "UNIP",   # Unipack
+    # 2026-08 review: demoted from EGX30 (MFPC, ALCN, SKPC promoted out of
+    # this list; CLHO entered EGX30 from outside the EGX70).
+    "EGCH",   # KIMA (El Nasr Chemicals)
+    "ARCC",   # Arabian Cement
+    "ORWE",   # Oriental Weavers
+    "OIH",    # Orascom Investment Holding
 ]
 
 

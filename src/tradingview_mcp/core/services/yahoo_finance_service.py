@@ -41,29 +41,65 @@ _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 # ─── Shared helpers ─────────────────────────────────────────────────────────
 
 
+# 5 days (not 2): when the newest session has no trades yet its close is None,
+# and a 2-day window then leaves only ONE usable close — too few to derive a
+# previous close, which used to fall back to chartPreviousClose (the same bar)
+# and report a 0% or nonsense move.
+_QUOTE_RANGE = "5d"
+
+# How far meta.regularMarketTime may lag the newest candle before the whole
+# quote block is treated as stale. One day covers normal intraday lag.
+_STALE_QUOTE_SECONDS = 86_400
+
+
 def _quote_url(symbol: str) -> str:
-    return f"{_BASE}/{symbol}?interval=1d&range=2d"
+    return f"{_BASE}/{symbol}?interval=1d&range={_QUOTE_RANGE}"
+
+
+def _valid_closes(chart_result: dict) -> list[float]:
+    """Daily closes with empty (None) candles dropped, oldest first."""
+    try:
+        closes = chart_result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        return [c for c in closes if c is not None]
+    except (IndexError, TypeError, KeyError):
+        return []
+
+
+def _quote_is_stale(chart_result: dict) -> bool:
+    """True when meta's quote block is older than the candle data.
+
+    Yahoo serves a frozen quote block for some venues while the chart series
+    stays current — observed on every EGX (.CA) symbol, where
+    ``regularMarketTime`` sits at 2024-07-23 and ``regularMarketPrice`` is the
+    price from that day. Comparing that against a current close produced
+    fictional moves (CCAP.CA: 2.2 vs a real 5.75 close, reported as -61%).
+    ``regularMarketDayHigh``/``Low``/``Volume`` are None in that state too.
+    """
+    meta = chart_result.get("meta", {})
+    if meta.get("regularMarketPrice") is None:
+        return True
+    quote_ts = meta.get("regularMarketTime")
+    if quote_ts is None:
+        return True
+    timestamps = chart_result.get("timestamp") or []
+    if not timestamps:
+        return False
+    try:
+        return quote_ts < timestamps[-1] - _STALE_QUOTE_SECONDS
+    except TypeError:
+        return True
 
 
 def _get_previous_close(chart_result: dict) -> Optional[float]:
-    """Extract previous trading day's close from candle data.
+    """Extract the previous trading day's close from candle data.
 
-    The meta fields 'previousClose' and 'chartPreviousClose' are unreliable:
-    - 'previousClose' is often None
-    - 'chartPreviousClose' returns the chart range start price, not yesterday's close
-
-    Instead, we use the actual close prices from the 2-day candle data.
-    With range=2d, indicators.quote[0].close gives [prev_day_close, today_close].
+    The meta fields are unreliable: 'previousClose' is often None and
+    'chartPreviousClose' returns the chart range's start price rather than
+    yesterday's close.
     """
-    try:
-        closes = chart_result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-        # Filter out None values (can happen for incomplete candles)
-        valid_closes = [c for c in closes if c is not None]
-        if len(valid_closes) >= 2:
-            return valid_closes[-2]
-    except (IndexError, TypeError, KeyError):
-        pass
-    # Fallback to meta fields if candle data unavailable
+    closes = _valid_closes(chart_result)
+    if len(closes) >= 2:
+        return closes[-2]
     meta = chart_result.get("meta", {})
     return meta.get("previousClose") or meta.get("chartPreviousClose")
 
@@ -71,8 +107,26 @@ def _get_previous_close(chart_result: dict) -> Optional[float]:
 def _format_quote(symbol: str, chart_result: dict) -> dict:
     """Pure formatter — no I/O. Shared by sync and async paths."""
     meta = chart_result.get("meta", {})
-    price = meta.get("regularMarketPrice")
-    prev_close = _get_previous_close(chart_result) or price
+    closes = _valid_closes(chart_result)
+    stale = _quote_is_stale(chart_result)
+
+    if stale and closes:
+        # Fall back to the candle series, which stays current. Candle closes
+        # arrive as float32 (6.900000095367432) — round so callers and the
+        # wire format show a real price.
+        price = round(closes[-1], 4)
+        prev_close = round(closes[-2], 4) if len(closes) >= 2 else None
+        price_source = "candle_close"
+    else:
+        price = meta.get("regularMarketPrice")
+        prev_close = _get_previous_close(chart_result)
+        if isinstance(prev_close, float):
+            prev_close = round(prev_close, 4)
+        price_source = "quote"
+
+    # A missing previous close stays None — substituting the current price
+    # silently reported change=0.0, indistinguishable from a genuinely flat
+    # session.
     chg = round(price - prev_close, 4) if (price and prev_close) else None
     chg_pct = (
         round((price - prev_close) / prev_close * 100, 2)
@@ -91,6 +145,8 @@ def _format_quote(symbol: str, chart_result: dict) -> dict:
         "market_state": meta.get("marketState", ""),  # REGULAR, PRE, POST, CLOSED
         "52w_high": meta.get("fiftyTwoWeekHigh"),
         "52w_low": meta.get("fiftyTwoWeekLow"),
+        "price_source": price_source,
+        "quote_stale": stale,
         "source": "Yahoo Finance",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

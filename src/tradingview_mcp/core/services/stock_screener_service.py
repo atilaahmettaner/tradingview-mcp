@@ -139,7 +139,9 @@ def screen_stocks(
         .order_by(sort_col, ascending=False)
         .limit(limit)
     )
-    total, df = query.get_scanner_data()
+    # get_scanner_data forwards kwargs to requests.post, which has no default
+    # timeout — a stalled endpoint would hang the worker thread forever.
+    total, df = query.get_scanner_data(timeout=20)
     rows = [
         {
             "ticker": _clean(r.get("ticker")),
@@ -199,7 +201,7 @@ def fetch_stock_prices(tickers: str) -> dict[str, Any]:
     # (measured live 2026-07-14). With it, 1,000 prices come back in one
     # HTTP request in ~0.5s.
     query = Query().set_tickers(*parsed).select(*_PRICE_COLUMNS).limit(len(parsed))
-    _total, df = query.get_scanner_data()
+    _total, df = query.get_scanner_data(timeout=20)  # requests has no default timeout
     found: dict[str, dict[str, Any]] = {}
     for r in df.to_dict("records"):
         row = {

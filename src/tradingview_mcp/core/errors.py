@@ -143,6 +143,37 @@ class BatchExecutionError(Exception):
         self.first_error = first_error
 
 
+class PartialDataError(Exception):
+    """Raised when a batched scan aborted early but still produced rows.
+
+    Wall-clock budgets and consecutive-failure bails used to return a plain
+    truncated list, indistinguishable from a complete scan — the abort reason
+    went only to stderr. This carries the partial rows plus scan telemetry so
+    the MCP boundary can return them WITH a PARTIAL_DATA envelope.
+
+    Attributes:
+        rows: The rows collected before the abort (already sorted/truncated).
+        batches_attempted / total_batches: Scan progress at abort time.
+        aborted_reason: Human-readable cause ("wall-clock budget…", …).
+    """
+
+    def __init__(
+        self,
+        rows: list,
+        batches_attempted: int,
+        total_batches: int,
+        aborted_reason: str,
+    ) -> None:
+        super().__init__(
+            f"Partial scan: {batches_attempted}/{total_batches} batches before abort "
+            f"({aborted_reason})"
+        )
+        self.rows = rows
+        self.batches_attempted = batches_attempted
+        self.total_batches = total_batches
+        self.aborted_reason = aborted_reason
+
+
 def exception_to_envelope(exc: BaseException, *, context: str = "") -> dict[str, Any]:
     """Translate any exception into the structured envelope at the MCP boundary.
 
@@ -157,6 +188,17 @@ def exception_to_envelope(exc: BaseException, *, context: str = "") -> dict[str,
     """
     if isinstance(exc, ScreenerServiceError):
         return exc.to_envelope()
+    if isinstance(exc, PartialDataError):
+        env = make_error(
+            ErrorCode.PARTIAL_DATA, str(exc),
+            batches_attempted=exc.batches_attempted,
+            total_batches=exc.total_batches,
+            aborted_reason=exc.aborted_reason,
+            retryable=True,
+        )
+        # Partial rows ride alongside the error so callers keep the data.
+        env["rows"] = exc.rows
+        return env
     if isinstance(exc, BatchExecutionError):
         return make_error(
             ErrorCode.ALL_BATCHES_FAILED, str(exc),

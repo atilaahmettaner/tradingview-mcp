@@ -1,6 +1,6 @@
 ---
 name: tradingview-mcp
-description: AI Trading Intelligence — live prices, 30+ technical indicators, backtesting (6 strategies), walk-forward overfitting detection, trade logs, equity curves, Reddit sentiment, news, and multi-market screener. Supports stocks, crypto, ETFs, indices, Turkish (BIST), and Egyptian (EGX) markets.
+description: AI Trading Intelligence — live prices, 30+ technical indicators, backtesting (6 strategies), walk-forward overfitting detection, trade logs, equity curves, licensed news sentiment (Marketaux), and multi-market screener. Supports stocks, crypto, ETFs, indices, Turkish (BIST), and Egyptian (EGX) markets.
 metadata: { "openclaw": { "emoji": "📈", "always": true, "homepage": "https://github.com/atilaahmettaner/tradingview-mcp" } }
 ---
 
@@ -60,7 +60,7 @@ python3 ~/.openclaw/tools/trading.py <command> [args]
 ### Sentiment & News
 | Intent | Tool |
 |--------|------|
-| "What is Reddit saying about BTC?" | `analyze_sentiment(symbol="BTC")` |
+| "What is the news sentiment on BTC?" | `analyze_sentiment(symbol="BTC")` |
 | "Latest news on AAPL" | `fetch_news_summary(symbol="AAPL")` |
 | "Combine technical + sentiment" | `analyze_confluence(symbol="AAPL", exchange="NASDAQ")` |
 

@@ -1,4 +1,10 @@
-"""EGX (Egyptian Exchange) sector classification for stock symbols."""
+"""EGX (Egyptian Exchange) sector classification for stock symbols.
+
+Symbols validated against the live TradingView egypt-market listing on
+2026-08-26; 12 delisted/suspended symbols were pruned. New listings are
+NOT auto-assigned to sectors (sector membership needs manual research) —
+the full live universe lives in coinlist/egx.txt.
+"""
 from __future__ import annotations
 from typing import Any, Dict, List, Set
 
@@ -172,7 +178,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "ATQA",  # Misr National Steel - Ataqa
         "MICH",  # Misr Chemical Industries
         "KZPC",  # Kafr El Zayat Pesticides
-        "FERC",  # Ferchem Misr for Fertilizers & Chemicals
         "ASCM",  # ASEC Company For Mining - ASCOM
         "SKPC",  # Sidi Kerir Petrochemicals - SIDPEC
         "ISMQ",  # Iron And Steel for Mines and Quarries
@@ -197,7 +202,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "ISPH",  # Ibnsina Pharma
         "SPMD",  # Speed Medical
         "CPCI",  # Cairo Pharmaceuticals
-        "MEDP",  # Medical Packaging Company
         "PRMH",  # Premium HealthCare Group
         "MPCI",  # Memphis Pharmaceuticals
         "NIPH",  # El-Nile Pharmaceuticals
@@ -209,7 +213,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
 
     "industrial_goods_and_services": {
         "ENGC",  # El Arabia Engineering Industries
-        "MBEN",  # M.B Engineering
         "SWDY",  # Elsewedy Electric
         "GDWA",  # Gadwa For Industrial Development
         "DTPP",  # Delta Printing & Packaging
@@ -332,7 +335,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
 
     "non_bank_financial_services": {
         "ACTF",  # Act Financial
-        "AREF",  # Egyptians Real Estate Fund Certificates
         "AIH",   # Arabia Investments Holding
         "NAHO",  # Naeem Holding
         "RAYA",  # Raya Holding For Financial Investments
@@ -340,26 +342,21 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "BTFH",  # Beltone Holding
         "KWIN",  # El Kahera El Watania Investment
         "AMIA",  # Arab Moltaka Investments
-        "OSOL",  # Osool ESB Securities Brokerage
         "OBRI",  # O B Financial Holding
         "AFDI",  # El Ahli Investment and Development
         "VALU",  # U Consumer Finance (ValU)
         "AIDC",  # Arabia for Investment and Development
         "ICLE",  # IncoLEASE
-        "EAC",   # Themar Brokerage
         "PRMH",  # Prime Holding
         "ASPI",  # Aspire Capital
         "MOIN",  # Mohandes Insurance
         "HRHO",  # EFG Holding
-        "VALM",  # Valmore Holding
         "SEIG",  # Saudi Egyptian Investment & Finance
         "ODIN",  # ODIN Investments
-        "ANFI",  # Alexandria National Financial Investment
         "ATLC",  # A.T.LEASE
         "BINV",  # B Investments Holding
         "GRCA",  # Grand Investment Capital
         "CCAP",  # QALA (Citadel Capital)
-        "EGX30ETF",  # EGX 30 Index ETF
         "CNFN",  # Contact Financial Holding
         "VLMR",   # Valmore Holding (USD)
         "VLMRA",  # Valmore Holding (EGP)
@@ -375,7 +372,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "GPIM",  # GPI For Urban Growth
         "COPR",  # Copper For Commercial Investment & Real Estate Development
         "EALR",  # El Arabia for Land Reclamation
-        "ICON",  # Engineering Industries (ICON)
         "CRST",  # Creast Mark For Contracting
     },
 
@@ -396,7 +392,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "RREI",  # Ceramica Remas (verify source naming if needed)
         "MBSC",  # Misr Beni Suef Cement
         "ARCC",  # Arabian Cement Company
-        "ARVA",  # Arab Valves Company
         "SVCE",  # South Valley Cement
         "PRCL",  # El Ezz Porcelain (Gemma)
         "LCSW",  # Lecico Egypt
@@ -409,7 +404,6 @@ EGX_SECTORS: Dict[str, Set[str]] = {
         "RAKT",  # Rakta Paper Manufacturing
         "UNIP",  # Universal For Paper and Packaging Materials (Unipack)
         "EPPK",  # El Ahram Co. For Printing And Packing
-        "NAPR",  # National Printing
     },
 }
 

@@ -6,7 +6,17 @@ from ..utils.validators import COINLIST_DIR
 
 
 def load_symbols(exchange: str) -> List[str]:
-    """Load symbols for a given exchange, with multiple fallback strategies."""
+    """Load symbols for a given exchange, with multiple fallback strategies.
+
+    Cached per exchange (the coinlist files ship with the package and don't
+    change at runtime) — every scan used to re-read and re-parse the file.
+    Returns a fresh copy so callers can't poison the cache by mutating it.
+    """
+    return list(_load_symbols_cached(exchange))
+
+
+@lru_cache(maxsize=64)
+def _load_symbols_cached(exchange: str) -> tuple:
     # Try multiple possible paths
     possible_paths = [
         os.path.join(COINLIST_DIR, f"{exchange}.txt"),
@@ -22,14 +32,14 @@ def load_symbols(exchange: str) -> List[str]:
             if os.path.exists(path):
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                symbols = [line.strip() for line in content.split('\n') if line.strip()]
+                symbols = tuple(line.strip() for line in content.split('\n') if line.strip())
                 if symbols:  # Only return if we actually got symbols
                     return symbols
         except (FileNotFoundError, IOError, UnicodeDecodeError):
             continue
-    
-    # If all fails, return empty list
-    return []
+
+    # If all fails, return empty tuple
+    return ()
 
 
 # "all.txt" is an aggregate of every exchange — suggesting it as an exchange

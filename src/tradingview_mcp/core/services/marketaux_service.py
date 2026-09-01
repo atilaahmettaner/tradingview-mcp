@@ -169,9 +169,14 @@ _BEARISH_KEYWORDS = [
 
 
 def _keyword_score(text: str) -> float:
-    t = (text or "").lower()
-    bull = sum(1 for w in _BULLISH_KEYWORDS if w in t)
-    bear = sum(1 for w in _BEARISH_KEYWORDS if w in t)
+    import re
+
+    # Whole-word matching only: bare substring checks scored "up" inside
+    # "supply", "call" inside "recall", "top" inside "stop" — systematically
+    # corrupting the bullish/bearish label.
+    words = set(re.findall(r"[a-z]+", (text or "").lower()))
+    bull = sum(1 for w in _BULLISH_KEYWORDS if w in words)
+    bear = sum(1 for w in _BEARISH_KEYWORDS if w in words)
     total = bull + bear
     if total == 0:
         return 0.0
@@ -251,11 +256,12 @@ def analyze_sentiment(
     scores: list[float] = []
     top: list[dict] = []
     for a in articles:
+        # Exact symbol match: startswith attributed FB/FDX sentiment to "F".
         ent_scores = [
             e.get("sentiment_score")
             for e in (a.get("entities") or [])
             if isinstance(e.get("sentiment_score"), (int, float))
-            and (e.get("symbol", "").upper().startswith(base) if base else True)
+            and (e.get("symbol", "").upper() == base if base else True)
         ]
         if not ent_scores:  # fall back to any scored entity on the article
             ent_scores = [

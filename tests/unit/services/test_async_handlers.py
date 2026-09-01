@@ -139,17 +139,17 @@ async def test_top_gainers_offloads_to_thread(monkeypatch):
     def slow_screener(exchange, timeframe, limit):
         import threading
         call_threads.append(threading.get_ident())
-        time.sleep(0.05)
+        time.sleep(0.2)
         return [{"symbol": "X", "changePercent": 1.0, "indicators": {}}]
 
     monkeypatch.setattr(server, "fetch_trending_analysis", slow_screener)
 
     # While top_gainers is in flight, this sleep should also run
-    # concurrently → both finish in ~50ms, not 100ms.
+    # concurrently → both finish in ~200ms, not 400ms.
     start = time.perf_counter()
 
     async def parallel_marker():
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.2)
 
     gainers_task = asyncio.create_task(
         server.top_gainers(exchange="KUCOIN", timeframe="15m", limit=5)
@@ -163,8 +163,9 @@ async def test_top_gainers_offloads_to_thread(monkeypatch):
     # The worker thread must NOT be the main event loop thread.
     import threading
     assert call_threads[0] != threading.main_thread().ident
-    assert elapsed < 0.1, (
-        f"top_gainers + marker took {elapsed:.2f}s; expected ~0.05s if "
+    # Parallel ≈ 0.2s, sequential ≈ 0.4s. Bound midway to absorb CI jitter.
+    assert elapsed < 0.32, (
+        f"top_gainers + marker took {elapsed:.2f}s; expected ~0.2s if "
         f"running concurrently. The handler may be blocking the event loop."
     )
 
@@ -175,11 +176,11 @@ async def test_combined_analysis_fans_subcalls_in_parallel(monkeypatch):
     the sum of all three.
     """
     def slow_tech(symbol, exchange, timeframe):
-        time.sleep(0.1)
+        time.sleep(0.2)
         return {"market_sentiment": {"momentum": "Bullish", "buy_sell_signal": "BUY"}}
 
     def slow_sentiment(symbol, category):
-        time.sleep(0.1)
+        time.sleep(0.2)
         return {
             "sentiment_score": 0.3,
             "sentiment_label": "Bullish",
@@ -187,7 +188,7 @@ async def test_combined_analysis_fans_subcalls_in_parallel(monkeypatch):
         }
 
     def slow_news(symbol, category, limit):
-        time.sleep(0.1)
+        time.sleep(0.2)
         return {"count": 3, "items": [{"title": "x"}, {"title": "y"}, {"title": "z"}]}
 
     monkeypatch.setattr(server, "analyze_coin", slow_tech)
@@ -198,10 +199,10 @@ async def test_combined_analysis_fans_subcalls_in_parallel(monkeypatch):
     result = await server.combined_analysis("AAPL", exchange="NASDAQ", timeframe="1D")
     elapsed = time.perf_counter() - start
 
-    # Sequential = ~300ms; parallel = ~100ms. Bound at 200ms to absorb
+    # Sequential = ~600ms; parallel = ~200ms. Bound at 400ms to absorb
     # CI jitter while still failing if someone removes the asyncio.gather.
-    assert elapsed < 0.2, (
-        f"combined_analysis took {elapsed:.2f}s; expected ~0.1s with the "
+    assert elapsed < 0.4, (
+        f"combined_analysis took {elapsed:.2f}s; expected ~0.2s with the "
         f"3-way parallel fan-out. Did asyncio.gather get unwound?"
     )
 
@@ -264,7 +265,7 @@ async def test_financial_news_offloads_feedparser(monkeypatch):
     calls = {"n": 0}
 
     def fake_summary(symbol, category, limit):
-        time.sleep(0.05)
+        time.sleep(0.2)
         calls["n"] += 1
         return {"symbol": symbol, "category": category, "count": 0,
                 "feedparser_available": True, "items": [], "timestamp": "x"}
@@ -281,16 +282,16 @@ async def test_financial_news_offloads_feedparser(monkeypatch):
 
     assert len(results) == 3
     assert calls["n"] == 3
-    # 3 parallel × 50ms sleep should finish near 50ms, not 150ms.
-    assert elapsed < 0.12, (
-        f"3 parallel financial_news calls took {elapsed:.2f}s; expected ~0.05s. "
+    # 3 parallel × 200ms sleep should finish near 200ms, not 600ms.
+    assert elapsed < 0.42, (
+        f"3 parallel financial_news calls took {elapsed:.2f}s; expected ~0.2s. "
         f"feedparser must be offloaded via asyncio.to_thread."
     )
 
 
 async def test_multi_timeframe_analysis_offloads(monkeypatch):
     def slow_run(full_symbol, exchange):
-        time.sleep(0.05)
+        time.sleep(0.2)
         return {"symbol": full_symbol, "exchange": exchange, "ok": True}
 
     monkeypatch.setattr(server, "run_multi_timeframe_analysis", slow_run)
@@ -302,7 +303,8 @@ async def test_multi_timeframe_analysis_offloads(monkeypatch):
     )
     elapsed = time.perf_counter() - start
     assert a["ok"] is True and b["ok"] is True
-    assert elapsed < 0.1
+    # Parallel ≈ 0.2s, sequential ≈ 0.4s — bound midway for CI jitter.
+    assert elapsed < 0.32
 
 
 # ---------------------------------------------------------------------------

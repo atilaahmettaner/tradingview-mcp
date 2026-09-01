@@ -212,6 +212,45 @@ def sanitize_exchange(ex: str, default: str = "kucoin") -> str:
     return default
 
 
+# Strict variants used at the MCP tool boundary. The sanitize_* pair silently
+# substitutes the default on bad input — an LLM asking for KRAKEN got KUCOIN
+# data with no indication anything was wrong. These raise instead, and the
+# tool wrapper converts the exception to a typed error envelope the caller
+# can self-correct from. Empty/None still means "use the default": callers
+# that omitted the parameter never asked for a specific market.
+
+def validate_timeframe(tf: str, default: str = "5m") -> str:
+    from tradingview_mcp.core.errors import ErrorCode, ScreenerServiceError
+
+    if not tf:
+        return default
+    normalized = tf.strip().lower()
+    if normalized in _TIMEFRAME_ALIASES:
+        return _TIMEFRAME_ALIASES[normalized]
+    raise ScreenerServiceError(
+        ErrorCode.INVALID_TIMEFRAME,
+        f"Invalid timeframe {tf!r}.",
+        valid_timeframes=sorted(ALLOWED_TIMEFRAMES),
+        retryable=False,
+    )
+
+
+def validate_exchange(ex: str, default: str = "kucoin") -> str:
+    from tradingview_mcp.core.errors import ErrorCode, ScreenerServiceError
+
+    if not ex:
+        return default
+    exs = ex.strip().lower()
+    if exs in EXCHANGE_SCREENER or exs in _TA_ONLY_SCREENERS:
+        return exs
+    raise ScreenerServiceError(
+        ErrorCode.INVALID_EXCHANGE,
+        f"Invalid exchange {ex!r}.",
+        valid_exchanges=sorted({*EXCHANGE_SCREENER, *_TA_ONLY_SCREENERS}),
+        retryable=False,
+    )
+
+
 def is_stock_exchange(exchange: str) -> bool:
     """Return True if the exchange is a stock market (not crypto)."""
     return exchange.strip().lower() in STOCK_EXCHANGES

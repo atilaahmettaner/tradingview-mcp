@@ -1,6 +1,6 @@
 {
   "name": "tradingview-mcp",
-  "version": "0.7.1",
+  "version": "0.9.0",
   "description": "TradingView MCP server for market prices, screeners, sentiment, backtesting, and technical analysis.",
   "author": {
     "name": "TradingView MCP contributors"

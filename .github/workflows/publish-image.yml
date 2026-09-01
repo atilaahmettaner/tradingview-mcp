@@ -33,7 +33,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Never publish an image whose code fails the unit suite. The full 4-version
+  # matrix runs in test.yml; one version here is enough to gate the image
+  # (the image itself runs a single interpreter anyway).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"   # matches the Dockerfile base image
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run pytest tests/unit -q
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

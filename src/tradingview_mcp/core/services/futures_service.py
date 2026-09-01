@@ -72,6 +72,11 @@ _SCREENER_COLS = [
     "volume", "change", "change_abs", "currency", "exchange",
 ]
 
+# get_scanner_data forwards kwargs to requests.post, which has NO default
+# timeout — a stalled TradingView endpoint would otherwise hang the worker
+# thread (and the MCP tool call) indefinitely.
+_SCAN_TIMEOUT_S = 20
+
 
 def _build_query(exchanges: list[str], volume_min: int = 0, limit: int = 50):
     q = _futures_query()
@@ -122,7 +127,7 @@ def get_futures_overview(
         symbols = FUTURES_WATCHLIST[category]
         q = _tickers_query(symbols)
         q.query["sort"] = {"sortBy": "volume", "sortOrder": "desc"}
-        count, df = q.get_scanner_data()
+        count, df = q.get_scanner_data(timeout=_SCAN_TIMEOUT_S)
         rows = df.to_dict(orient="records")
         return {
             "category": category,
@@ -135,7 +140,7 @@ def get_futures_overview(
     # category == "all" (or unrecognized): broad volume scan across exchanges.
     q = _build_query(ex_list, volume_min=volume_min, limit=limit)
     q.query["sort"] = {"sortBy": "volume", "sortOrder": "desc"}
-    count, df = q.get_scanner_data()
+    count, df = q.get_scanner_data(timeout=_SCAN_TIMEOUT_S)
     rows = df.to_dict(orient="records")
     return {
         "category": category,
@@ -153,11 +158,16 @@ def get_futures_movers(
     volume_min: int = 10,
 ) -> dict[str, Any]:
     """Top futures gainers or losers by % change."""
+    direction = direction.lower().strip()
+    if direction not in ("gainers", "losers"):
+        # A typo like "gainer" used to silently return LOSERS (any value
+        # other than the literal "gainers" fell into the asc branch).
+        return {"error": f"Unknown direction '{direction}'. Valid: gainers, losers"}
     ex_list = ALL_FUTURES_EXCHANGES if exchanges.lower() == "global" else US_FUTURES_EXCHANGES
     q = _build_query(ex_list, volume_min=volume_min, limit=limit)
     sort_order = "desc" if direction == "gainers" else "asc"
     q.query["sort"] = {"sortBy": "change", "sortOrder": sort_order}
-    count, df = q.get_scanner_data()
+    count, df = q.get_scanner_data(timeout=_SCAN_TIMEOUT_S)
     return {
         "direction": direction,
         "total_available": count,
@@ -180,7 +190,7 @@ def get_futures_category_snapshot(category: str) -> dict[str, Any]:
     q = _tickers_query(symbols)
 
     try:
-        count, df = q.get_scanner_data()
+        count, df = q.get_scanner_data(timeout=_SCAN_TIMEOUT_S)
     except Exception as exc:
         # Do NOT silently fall back to an unrelated volume scan — that returns
         # contracts the caller never asked for, mislabeled under this category.

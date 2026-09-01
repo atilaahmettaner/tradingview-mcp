@@ -4,6 +4,76 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-26
+
+### Changed (behavior)
+- **Strict input validation**: tools now return `INVALID_EXCHANGE` /
+  `INVALID_TIMEFRAME` error envelopes (listing valid values) instead of
+  silently substituting the default — `exchange="KRAKEN"` used to return
+  KUCOIN data with no warning. Aliases (`1d`→`1D`) and omitted parameters
+  still resolve silently.
+- **`PARTIAL_DATA` envelopes**: batched scans that abort mid-flight
+  (wall-clock budget / consecutive-failure bail) return a `PARTIAL_DATA`
+  envelope that still carries the collected rows, instead of a plain list
+  indistinguishable from a complete scan.
+
+### Fixed
+- **`top_losers` returned gainers**: the service sorted descending and
+  truncated to `limit` before the tool re-sorted ascending, so it returned
+  the smallest of the top gainers. Sorting now happens before truncation.
+- **Volume breakout scanner fabricated breakouts**: symbols missing a
+  `volume.SMA20` baseline got a fallback ratio that was always exactly 2.0
+  and passed the default gate on price change alone. They are now skipped.
+- **Walk-forward robustness inverted for losing strategies**: a strategy
+  losing MORE out-of-sample scored a capped 2.0 ("maximally robust") in the
+  both-negative branch. Warmup-starved test folds are flagged
+  `insufficient_data` and excluded instead of reading as OVERFITTED.
+- **Multi-timeframe alignment misattribution**: a failed timeframe shifted
+  every later score onto the wrong timeframe key in `scores_by_tf`.
+- **`fetch_multi_timeframe_patterns` ignored its `symbols` argument**
+  (whole-exchange scan) while caching on it.
+- **Backtest metrics**: drawdown/Calmar/Sharpe now come from a per-bar
+  mark-to-market equity series (intra-trade dips count); open positions at
+  data end are force-closed and flagged `forced_exit`; the buy-and-hold
+  benchmark pays the same round-trip costs as the strategy;
+  `compare_strategies` validates `period`.
+- **Thread safety**: the Yahoo options session handshake is lock-guarded;
+  the screener cache is bounded (256 entries); cached indicator dicts are
+  copied before ATR backfill; the resilience layer's stale-while-error
+  cache is actually populated on success for `cache_key` callers.
+- **Timeouts everywhere**: all `get_scanner_data` calls pass explicit
+  timeouts (`requests` has no default).
+- **Docker HEALTHCHECK**: the server now serves `GET /health` under the
+  streamable-http transport, so containers stop cycling to `unhealthy`.
+- Marketaux sentiment: whole-word keyword scoring and exact entity-symbol
+  matching; multi-agent analysis no longer crashes on explicit-null
+  indicators; proxy credentials are URL-encoded.
+
+### Removed
+- Dead code (~800 lines): the unwired paper-trading `portfolio.py`, the
+  RSS `news_service.py` and Reddit `sentiment_service.py` (both replaced by
+  Marketaux in 0.6), unused fetchers in `screener_provider.py` /
+  `screener_service.py`, and the stray `PR_BODY.md`.
+
+### Infrastructure
+- **CI now runs the test suite** (Python 3.10–3.13 matrix) on every
+  push/PR, and the Docker image publish is gated on it.
+- `pandas` declared as a direct dependency (server.py imports it at module
+  top; it previously arrived only via the tradingview-screener pin).
+- `docker-compose.yml` points at the GHCR image CI actually builds.
+- Real `SECURITY.md` (GitHub Security Advisories; 0.9.x supported).
+
+## [0.8.1] - 2026-08-02
+
+### Fixed
+- Raised the `mcp` lower bound to `>=1.14.0` (still `<2`): with
+  `from __future__ import annotations`, `Tool.from_function` in <=1.13.x
+  dies at import time on string annotations, so the server never started
+  on those SDK versions.
+
+### Added
+- Official MCP Registry manifest (`server.json`) + OIDC publish workflow.
+
 ## [0.8.0] - 2026-07-29
 
 ### Fixed

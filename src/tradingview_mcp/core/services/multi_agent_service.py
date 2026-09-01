@@ -33,9 +33,13 @@ def calculate_sentiment_score(indicators: dict, price_change: float) -> dict:
     Returns:
         Dict with 'score' (raw), 'normalized' (-3..+3), and 'signals' list.
     """
-    rsi = indicators.get("RSI", 50.0)
-    macd = indicators.get("MACD.macd", 0.0)
-    macd_signal = indicators.get("MACD.signal", 0.0)
+    # TradingView returns explicit nulls, so dict.get defaults don't fire —
+    # `indicators.get("RSI", 50.0)` yields None when the key exists as None,
+    # and `None > 60` crashes the whole tool.
+    rsi = indicators.get("RSI")
+    rsi = 50.0 if rsi is None else rsi
+    macd = indicators.get("MACD.macd")
+    macd_signal = indicators.get("MACD.signal")
 
     score = 0
     signals: list[str] = []
@@ -80,9 +84,11 @@ def calculate_risk_score(indicators: dict, bbw: float) -> dict:
     Returns:
         Dict with 'score' (negative = more risk), 'warnings' list, and 'level' label.
     """
-    close = indicators.get("close", 0.0)
-    sma20 = indicators.get("SMA20", close)
-    ema200 = indicators.get("EMA200", close)
+    # Explicit-null-safe reads (see calculate_sentiment_score).
+    close = indicators.get("close") or 0.0
+    sma20 = indicators.get("SMA20") or close
+    ema200 = indicators.get("EMA200") or close
+    bbw = bbw or 0.0
 
     score = 0
     warnings: list[str] = []
@@ -94,7 +100,7 @@ def calculate_risk_score(indicators: dict, bbw: float) -> dict:
         score += 1
         warnings.append("Low volatility (Squeeze)")
 
-    if ema200 is not None and close < ema200:
+    if ema200 and close < ema200:
         score -= 1
         warnings.append("Price below 200 EMA (Long-term bearish structure)")
 
@@ -146,27 +152,28 @@ def run_multi_agent_analysis(
     if not metrics:
         return {"error": f"Could not compute metrics for {symbol}"}
 
-    price = metrics.get("price", 0.0)
-    change = metrics.get("change", 0.0)
-    bb_rating = metrics.get("rating", 0)
-    bbw = metrics.get("bbw", 0.0)
+    price = metrics.get("price") or 0.0
+    change = metrics.get("change") or 0.0
+    bb_rating = metrics.get("rating") or 0
+    bbw = metrics.get("bbw") or 0.0  # compute_metrics returns bbw=None sometimes
 
-    # Agent 1 — Technical Analyst
+    # Rule set 1 — Bollinger/price checklist
     tech_analyst = {
-        "role": "Technical Analyst",
+        "role": "Trend & Bands (rule set)",
         "stance": "Bullish" if bb_rating > 0 else "Bearish" if bb_rating < 0 else "Neutral",
         "score": bb_rating,
         "key_observations": [
             f"Price is {price} ({change:+.2f}%)",
             f"Bollinger Rating: {bb_rating} ({metrics.get('signal', 'Neutral')})",
-            f"RSI: {indicators.get('RSI', 50):.1f}",
+            f"RSI: {indicators.get('RSI') or 50.0:.1f}",
         ],
     }
 
-    # Agent 2 — Sentiment Analyst
+    # Rule set 2 — momentum checklist (RSI/MACD only; no news or sentiment
+    # source feeds this, so it must not be labeled "sentiment").
     sentiment_data = calculate_sentiment_score(indicators, change)
     sentiment_analyst = {
-        "role": "Sentiment & Momentum Analyst",
+        "role": "Momentum (RSI/MACD rule set)",
         "stance": (
             "Bullish" if sentiment_data["normalized"] > 0
             else "Bearish" if sentiment_data["normalized"] < 0
@@ -176,10 +183,10 @@ def run_multi_agent_analysis(
         "key_observations": sentiment_data["signals"],
     }
 
-    # Agent 3 — Risk Manager
+    # Rule set 3 — volatility/structure checklist
     risk_data = calculate_risk_score(indicators, bbw)
     risk_manager = {
-        "role": "Risk Manager",
+        "role": "Volatility & Structure (rule set)",
         "risk_level": risk_data["level"],
         "risk_score": risk_data["score"],
         "warnings": risk_data["warnings"],
@@ -192,19 +199,26 @@ def run_multi_agent_analysis(
         + risk_manager["risk_score"]
     )
 
+    # "confidence" here is rule agreement, not a probability — the wording
+    # must never suggest conviction the underlying single snapshot can't carry.
     if total_score >= 3 and risk_manager["risk_level"] != "High":
-        final_decision, confidence = "STRONG BUY", "High"
+        final_decision, confidence = "BUY (strong rule alignment)", "rules strongly aligned"
     elif total_score > 0:
-        final_decision, confidence = "BUY", "Medium"
+        final_decision, confidence = "BUY (mixed rules)", "rules partially aligned"
     elif total_score <= -3:
-        final_decision, confidence = "STRONG SELL", "High"
+        final_decision, confidence = "SELL (strong rule alignment)", "rules strongly aligned"
     elif total_score < 0:
-        final_decision, confidence = "SELL", "Medium"
+        final_decision, confidence = "SELL (mixed rules)", "rules partially aligned"
     else:
-        final_decision, confidence = "HOLD", "Low"
+        final_decision, confidence = "HOLD", "rules disagree"
 
     return {
-        "framework_name": "TradingAgents-MCP Pipeline",
+        "framework_name": "Rule-Based Signal Summary",
+        "method_note": (
+            "Deterministic indicator checklist computed from a single delayed "
+            "snapshot. This is not an AI debate, contains no news/sentiment "
+            "input, and the decision is a threshold artifact, not a probability."
+        ),
         "target": symbol,
         "timeframe": timeframe,
         "agents_debate": {
@@ -217,9 +231,9 @@ def run_multi_agent_analysis(
             "confidence": confidence,
             "net_score": total_score,
             "summary": (
-                f"Technical score: {tech_analyst['score']}, "
-                f"Sentiment score: {sentiment_analyst['score']}, "
-                f"Risk adjustment: {risk_manager['risk_score']}"
+                f"Bands score: {tech_analyst['score']}, "
+                f"Momentum score: {sentiment_analyst['score']}, "
+                f"Volatility adjustment: {risk_manager['risk_score']}"
             ),
         },
     }

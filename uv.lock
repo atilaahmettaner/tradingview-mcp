@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10, <3.14"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -1093,12 +1093,13 @@ wheels = [
 
 [[package]]
 name = "tradingview-mcp-server"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "feedparser" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
+    { name = "pandas" },
     { name = "requests" },
     { name = "tradingview-screener" },
     { name = "tradingview-ta" },
@@ -1115,6 +1116,7 @@ requires-dist = [
     { name = "feedparser", specifier = ">=6.0.12" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.14.0,<2" },
+    { name = "pandas", specifier = ">=2" },
     { name = "requests", specifier = ">=2.32" },
     { name = "tradingview-screener", specifier = "==3.0.0" },
     { name = "tradingview-ta", specifier = ">=3.3.0" },

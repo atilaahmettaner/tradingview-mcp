@@ -1,9 +1,9 @@
-version: '3.8'
-
 services:
   tradingview-mcp:
     build: .
-    image: atilaahmet/tradingview-mcp:latest
+    # CI publishes to GHCR (see .github/workflows/publish-image.yml) — the old
+    # Docker Hub image (atilaahmet/tradingview-mcp) is not what CI builds.
+    image: ghcr.io/atilaahmettaner/tradingview-mcp:latest
     container_name: tradingview-mcp
     ports:
       - "8080:8000"

@@ -141,7 +141,6 @@ def calc_macd(
     macd_values = [(i, v) for i, v in enumerate(macd_line) if v is not None]
     if len(macd_values) >= signal:
         # Compute EMA of macd values
-        start_idx = macd_values[0][0]
         macd_only = [v for _, v in macd_values]
         sig_ema = calc_ema(macd_only, signal)
         for j, (orig_i, _) in enumerate(macd_values):

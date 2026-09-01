@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import http.cookiejar
 import json
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -50,8 +51,12 @@ _UA = (
 _BASE = "https://query2.finance.yahoo.com/v7/finance/options"
 
 # Session cache: crumb tokens expire — re-handshake every ~25 minutes.
+# The lock matters: tools run on worker threads, and Yahoo's crumb is bound to
+# the cookie jar it was issued against. Two interleaved handshakes could pair
+# one session's crumb with the other's cookies → persistent 401s.
 _SESSION_CACHE: dict = {"crumb": None, "opener": None, "ts": 0.0}
 _SESSION_TTL = 1500
+_SESSION_LOCK = threading.Lock()
 
 
 def _new_session_opener() -> urllib.request.OpenerDirector:
@@ -76,30 +81,31 @@ def _get_session() -> tuple:
     2. Ask query2/v1/test/getcrumb for the per-session crumb token.
     3. Re-use both for all subsequent options calls.
     """
-    now = time.time()
-    if _SESSION_CACHE["crumb"] and (now - _SESSION_CACHE["ts"]) < _SESSION_TTL:
-        return _SESSION_CACHE["crumb"], _SESSION_CACHE["opener"]
+    with _SESSION_LOCK:
+        now = time.time()
+        if _SESSION_CACHE["crumb"] and (now - _SESSION_CACHE["ts"]) < _SESSION_TTL:
+            return _SESSION_CACHE["crumb"], _SESSION_CACHE["opener"]
 
-    opener = _new_session_opener()
-    # Cookie-drop step. Any HTTP status here is fine — we only need Set-Cookie.
-    try:
-        opener.open("https://fc.yahoo.com/", timeout=_TIMEOUT)
-    except urllib.error.HTTPError:
-        pass
-    except urllib.error.URLError:
-        pass
+        opener = _new_session_opener()
+        # Cookie-drop step. Any HTTP status here is fine — we only need Set-Cookie.
+        try:
+            opener.open("https://fc.yahoo.com/", timeout=_TIMEOUT)
+        except urllib.error.HTTPError:
+            pass
+        except urllib.error.URLError:
+            pass
 
-    req = urllib.request.Request(
-        "https://query2.finance.yahoo.com/v1/test/getcrumb",
-        headers={"User-Agent": _UA, "Accept": "text/plain"},
-    )
-    with opener.open(req, timeout=_TIMEOUT) as resp:
-        crumb = resp.read().decode("utf-8").strip()
-    if not crumb or len(crumb) > 100:
-        raise ValueError(f"unexpected crumb response: {crumb[:80]!r}")
+        req = urllib.request.Request(
+            "https://query2.finance.yahoo.com/v1/test/getcrumb",
+            headers={"User-Agent": _UA, "Accept": "text/plain"},
+        )
+        with opener.open(req, timeout=_TIMEOUT) as resp:
+            crumb = resp.read().decode("utf-8").strip()
+        if not crumb or len(crumb) > 100:
+            raise ValueError(f"unexpected crumb response: {crumb[:80]!r}")
 
-    _SESSION_CACHE.update(crumb=crumb, opener=opener, ts=now)
-    return crumb, opener
+        _SESSION_CACHE.update(crumb=crumb, opener=opener, ts=now)
+        return crumb, opener
 
 
 def _fetch(url: str) -> dict:
@@ -121,7 +127,8 @@ def _fetch(url: str) -> dict:
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             # Session likely expired mid-flight. Invalidate and retry once.
-            _SESSION_CACHE.update(crumb=None, opener=None, ts=0.0)
+            with _SESSION_LOCK:
+                _SESSION_CACHE.update(crumb=None, opener=None, ts=0.0)
             return _go()
         raise
 

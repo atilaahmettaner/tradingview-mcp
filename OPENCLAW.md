@@ -8,7 +8,7 @@ After setup, you can send messages like:
 
 | Message | What Happens |
 |---------|-------------|
-| `AAPL analiz et` | Live price + RSI/MACD/Bollinger + Reddit sentiment combined |
+| `AAPL analiz et` | Live price + RSI/MACD/Bollinger + news sentiment combined |
 | `BTC 2 yılda en iyi strateji neydi?` | Runs all 6 strategies, returns ranked leaderboard |
 | `Bugün piyasalar nasıl?` | S&P500, NASDAQ, BTC/ETH, EUR/USD snapshot |
 
@@ -170,7 +170,7 @@ Your OpenClaw agent will have access to all tradingview tools via the wrapper:
 - `walk_forward_backtest_strategy` — Overfitting detection with robustness score
 
 ### Sentiment & News
-- `analyze_sentiment` — Reddit sentiment for any ticker
+- `analyze_sentiment` — licensed news sentiment (Marketaux) for any ticker
 - `fetch_news_summary` — Latest news from financial RSS feeds
 
 ### Screener

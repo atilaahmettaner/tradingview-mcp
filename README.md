@@ -68,7 +68,7 @@ If you want an AI clicking around *your* TradingView Desktop — editing Pine Sc
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/downloads/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Ready-brightgreen)](https://modelcontextprotocol.com/)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-blueviolet)](https://openclaw.ai)
-[![Version](https://img.shields.io/badge/version-v0.8.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
 [![PyPI](https://img.shields.io/badge/PyPI-tradingview--mcp--server-orange)](https://pypi.org/project/tradingview-mcp-server/)
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤️-pink?logo=github-sponsors)](https://github.com/sponsors/atilaahmettaner)
 
