@@ -23,6 +23,10 @@ STOCK_EXCHANGES: Set[str] = {
     "sse", "szse", "chn",
     "twse", "tpex",
     "tadawul", "tasi",                  # Saudi Stock Exchange (Tadawul) — All Share Index (TASI)
+    # European + Canadian stock markets (EP.../MIL/TSX/LSE/SIX/BME/FRA)
+    "epa", "paris", "enx", "mil", "milan", "bit", "lse", "lon",
+    "six", "swx", "bme", "mcx", "tsx", "tse", "xsx", "ventures",
+    "fra", "xetra", "fwb", "ams", "aex", "bru", "enb", "lis", "elp",
 }
 
 EXCHANGE_SCREENER = {
@@ -67,6 +71,18 @@ EXCHANGE_SCREENER = {
     # Saudi Stock Market (Tadawul) — TradingView scanner uses /ksa/
     "tadawul": "ksa",
     "tasi": "ksa",          # alias: Tadawul All Share Index
+    # ── European + Canadian stock markets (live TV country slugs) ──
+    "epa": "france", "paris": "france", "enx": "france",     # Euronext Paris
+    "mil": "italy", "milan": "italy", "bit": "italy",         # Borsa Italiana
+    "lse": "uk", "lon": "uk",                                 # London
+    "six": "switzerland", "swx": "switzerland",               # SIX Swiss Exchange
+    "bme": "spain", "mcx": "spain",                          # Bolsa de Madrid
+    "tsx": "canada", "tse": "canada",                        # Toronto
+    "xsx": "canada", "ventures": "canada",                   # TSX Venture
+    "fra": "germany", "xetra": "germany", "fwb": "germany",  # Deutsche Börse
+    "ams": "netherlands", "aex": "netherlands",              # Euronext Amsterdam
+    "bru": "belgium", "enb": "belgium",                      # Euronext Brussels
+    "lis": "portugal", "elp": "portugal",                    # Euronext Lisbon
 }
 
 # Venues TradingView serves for single-symbol TA (tradingview-ta) but NOT via the
@@ -111,6 +127,17 @@ _EXCHANGE_TV_PREFIX: dict = {
     "tpex": "TPEX",
     "tadawul": "TADAWUL",
     "tasi": "TADAWUL",
+    # ── European + Canadian TV symbol prefixes (live API) ──
+    "epa": "EURONEXT", "paris": "EURONEXT", "enx": "EURONEXT",
+    "mil": "MIL", "milan": "MIL", "bit": "MIL",
+    "lse": "LSE", "lon": "LSE",
+    "six": "SIX", "swx": "SIX",
+    "bme": "BME", "mcx": "BME",
+    "tsx": "TSX", "tse": "TSX", "xsx": "TSX", "ventures": "TSX",
+    "fra": "XETR", "xetra": "XETR", "fwb": "XETR",
+    "ams": "EURONEXT", "aex": "EURONEXT",
+    "bru": "EURONEXT", "enb": "EURONEXT",
+    "lis": "EURONEXT", "elp": "EURONEXT",
 }
 
 _YAHOO_SYMBOL_ALIASES: dict = {
