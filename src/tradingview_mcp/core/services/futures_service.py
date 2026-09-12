@@ -39,8 +39,8 @@ ALL_FUTURES_EXCHANGES = ["CME", "COMEX", "NYMEX", "CBOT", "ICEEUR", "ICESG", "EU
 # Well-known front-month continuous contract symbols
 FUTURES_WATCHLIST: dict[str, list[str]] = {
     "equity_index": [
-        "CME:ES1!", "CME:NQ1!", "CME:RTY1!", "CME:YM1!",
-        "CME:EMD1!", "CME:NKD1!",
+        "CME_MINI:ES1!", "CME_MINI:NQ1!", "CME_MINI:RTY1!", "CBOT_MINI:YM1!",
+        "CME_MINI:EMD1!", "CME:NKD1!",
     ],
     "energy": [
         "NYMEX:CL1!", "NYMEX:NG1!", "NYMEX:HO1!", "NYMEX:RB1!",
@@ -52,7 +52,7 @@ FUTURES_WATCHLIST: dict[str, list[str]] = {
     ],
     "agriculture": [
         "CBOT:ZC1!", "CBOT:ZW1!", "CBOT:ZS1!", "CBOT:ZL1!",
-        "CBOT:ZM1!", "CBOT:LE1!", "CBOT:HE1!",
+        "CBOT:ZM1!", "CME:LE1!", "CME:HE1!",
     ],
     "rates": [
         "CBOT:ZN1!", "CBOT:ZF1!", "CBOT:ZT1!", "CBOT:ZB1!",
