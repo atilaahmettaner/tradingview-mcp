@@ -68,6 +68,7 @@ If you want an AI clicking around *your* TradingView Desktop — editing Pine Sc
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/downloads/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Ready-brightgreen)](https://modelcontextprotocol.com/)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-blueviolet)](https://openclaw.ai)
+[![Hermes Agent Ready](https://img.shields.io/badge/Hermes_Agent-Ready-gold)](HERMES_INTEGRATION.md)
 [![Version](https://img.shields.io/badge/version-v0.9.0-blue)](https://github.com/atilaahmettaner/tradingview-mcp/releases)
 [![PyPI](https://img.shields.io/badge/PyPI-tradingview--mcp--server-orange)](https://pypi.org/project/tradingview-mcp-server/)
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤️-pink?logo=github-sponsors)](https://github.com/sponsors/atilaahmettaner)
@@ -386,6 +387,47 @@ Unlike basic screeners, this framework deploys **specialized AI agents** that de
 3. **🛡️ Risk Manager** — Volatility, drawdown risk, mean-reversion signals
 
 *Output: `STRONG BUY` / `BUY` / `HOLD` / `SELL` / `STRONG SELL` with confidence score*
+
+---
+
+## 🤖 Native Hermes Agent Integration
+
+Connect this server to [Hermes Agent](https://hermes-agent.nousresearch.com) as a **native MCP server** — Hermes speaks MCP directly, so no wrapper script is needed (unlike the OpenClaw bridge above). The hardened default builds and runs the server inside a locked-down, non-root Docker container over stdio; an unsandboxed `uvx` path is documented only as an explicitly labeled, lower-isolation alternative.
+
+```bash
+# 1. Build the container from this checkout's source + uv.lock (not PyPI)
+test -z "$(git status --porcelain -- pyproject.toml uv.lock src)" || exit 1
+printf '%s  %s\n' \
+  '1388f4eb3f36002d4d5b8ea93af6598aa79cc4d509874b8c4e8277adafb91237' \
+  'uv.lock' | shasum -a 256 -c -
+uv lock --check
+docker build -f Dockerfile.hermes --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
+  -t tradingview-mcp-hermes:"$(git rev-parse --short HEAD)" .
+
+# 2. Configure inside a dedicated Hermes profile (do not clone default)
+hermes profile create tradingresearch --no-skills
+hermes --profile tradingresearch setup
+hermes --profile tradingresearch tools disable \
+  web browser terminal file code_execution vision image_gen tts skills todo \
+  memory session_search connections delegation cronjob computer_use kanban
+hermes --profile tradingresearch tools list   # only clarify remains enabled
+hermes --profile tradingresearch mcp list   # abort if tradingview-market-data already exists
+hermes --profile tradingresearch mcp add tradingview-market-data --command docker \
+  --args run --rm -i --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+  tradingview-mcp-hermes:"$(git rev-parse --short HEAD)"
+hermes --profile tradingresearch mcp configure tradingview-market-data
+# Select only: yahoo_price, market_snapshot, coin_analysis, financial_news,
+# backtest_strategy, compare_strategies
+hermes --profile tradingresearch config set mcp_servers.tradingview-market-data.tools.resources false
+hermes --profile tradingresearch config set mcp_servers.tradingview-market-data.tools.prompts false
+hermes --profile tradingresearch mcp test tradingview-market-data
+hermes --profile tradingresearch tools list   # verify the six-tool include-only list
+hermes --profile tradingresearch chat -t tradingview-market-data
+```
+
+👉 **[Full Hermes Agent Setup Guide →](HERMES_INTEGRATION.md)** — commit/lockfile verification, tool-allowlist lockdown, security notes, the labeled lower-isolation `uvx` alternative, and rollback.
+
+> ⚠️ This is the headless market-data server (Yahoo Finance / TradingView screener / Marketaux). It is unrelated to any separate TradingView **Desktop** browser-automation MCP you may already have registered — do not reuse that integration's server name for this one.
 
 ---
 

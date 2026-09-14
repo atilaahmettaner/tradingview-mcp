@@ -1,0 +1,67 @@
+# Dockerfile.hermes
+#
+# Hardened, non-root container for the native Hermes Agent MCP integration
+# documented in HERMES_INTEGRATION.md. Builds tradingview-mcp-server from
+# THIS checkout's source and uv.lock (uv sync --locked), not from PyPI, so
+# the code that runs matches whatever commit was actually reviewed —
+# PyPI's latest published release (0.8.1 at review time) can lag or differ
+# from the repository's HEAD.
+#
+# Reproducibility / provenance — verify before trusting, do not assume:
+#   Authored against source commit  a1e54b07e5c21b375363607920f297c5adfbeed4
+#   Authored against uv.lock sha256 1388f4eb3f36002d4d5b8ea93af6598aa79cc4d509874b8c4e8277adafb91237
+#   These describe the repository state AT AUTHORING TIME ONLY. Every later
+#   commit can change source and/or uv.lock, so a future clone or `git pull`
+#   is NOT guaranteed to match the values above. Before every build,
+#   verify the application inputs are clean and treat a mismatch as
+#   "stop and re-review", not
+#   "safe to ignore":
+#     git rev-parse HEAD
+#     shasum -a 256 uv.lock
+#   Compare both against the commit/hash recorded in HERMES_INTEGRATION.md
+#   for the build you intend to run, and update that file (not just this
+#   comment) whenever the pin changes.
+
+FROM python:3.13-slim AS build
+
+ARG SOURCE_COMMIT=unknown
+LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
+
+RUN pip install --no-cache-dir uv==0.11.31
+
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+
+# Fail closed if this reviewed lockfile changed, then verify it is current
+# with pyproject.toml. --locked prevents any lockfile rewrite during sync;
+# --no-dev skips pytest/dev-only dependencies.
+# --no-editable: install a real copy into the venv, not a path link back
+# into this build stage, which will not exist in the runtime stage below.
+RUN printf '%s  %s\n' \
+      '1388f4eb3f36002d4d5b8ea93af6598aa79cc4d509874b8c4e8277adafb91237' \
+      'uv.lock' | sha256sum -c - \
+    && uv lock --check \
+    && uv sync --locked --no-dev --no-editable
+
+FROM python:3.13-slim AS runtime
+
+ARG SOURCE_COMMIT=unknown
+LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
+
+# Non-root runtime user — the base image ships no such account by default.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin mcp
+
+WORKDIR /app
+COPY --from=build /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
+
+USER mcp
+
+# stdio is tradingview_mcp.server:main()'s default transport; passed
+# explicitly for clarity. No ports are exposed — this container only ever
+# talks to Hermes over stdin/stdout, plus outbound HTTPS to the market-data
+# providers it queries (Yahoo Finance, TradingView screener, Marketaux).
+# Unrestricted egress to those providers is an accepted residual risk for
+# this rollout — see HERMES_INTEGRATION.md's Security Notes section.
+ENTRYPOINT ["tradingview-mcp", "stdio"]
