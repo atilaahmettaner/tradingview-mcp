@@ -21,13 +21,14 @@ async def get_release_calendar(
 
     limit_count = max(1, min(int(limit), 100))
     params: dict[str, str] = {"limit": str(limit_count)}
+    headers: dict[str, str] = {}
     api_key = os.getenv("FXMACRODATA_API_KEY")
     if api_key:
-        params["api_key"] = api_key
+        headers["X-API-Key"] = api_key
 
     url = f"{base_url.rstrip('/')}/calendar/{currency.lower()}"
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(url, params=params)
+        response = await client.get(url, params=params, headers=headers)
         response.raise_for_status()
         payload = response.json()
 
