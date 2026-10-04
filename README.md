@@ -126,6 +126,11 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 
 ---
 
+> [!WARNING]
+> **Security notice: impersonating copies of this repository.** This project is **Python-only** and has **no official npm / Node.js package**. The only official sources are this repository (`atilaahmettaner/tradingview-mcp`), the PyPI package [`tradingview-mcp-server`](https://pypi.org/project/tradingview-mcp-server/), and the hosted server at [pro.cryptosieve.com](https://pro.cryptosieve.com).
+>
+> Copies of this repository published under other accounts add a `package.json` whose dependencies install malware through npm (for example `oracle-redis`, [MAL-2026-16390](https://osv.dev/vulnerability/MAL-2026-16390)). If you cloned a "tradingview-mcp" repository from another account and ran `npm install`, treat that machine as compromised. Thanks to @roberttidball for the report (#101).
+
 ## 🚀 Quick Start (5 Minutes)
 
 **Two ways to run it — the same 37 tools either way:**
