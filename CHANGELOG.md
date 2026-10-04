@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **TradingView interval codes rejected as timeframes**: `"60"`, `"240"`,
+  `"15"`, `"5"`, `"1440"`, `"D"` and `"W"` are now accepted and mapped to
+  `1h`, `4h`, `15m`, `5m` and `1D` / `1W`. Integrations sending TradingView's
+  native codes used to silently get the tool's default timeframe instead
+  (a `"60"` request returned 15m data), and since 0.9.0's strict validation
+  they got `INVALID_TIMEFRAME`. Unsupported intervals (`30m`, `120`, ...)
+  still fail loudly.
+
 ## [0.9.0] - 2026-08-26
 
 ### Changed (behavior)
