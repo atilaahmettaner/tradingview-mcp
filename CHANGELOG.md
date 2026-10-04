@@ -12,6 +12,23 @@ All notable changes to this project will be documented in this file.
   (a `"60"` request returned 15m data), and since 0.9.0's strict validation
   they got `INVALID_TIMEFRAME`. Unsupported intervals (`30m`, `120`, ...)
   still fail loudly.
+- **Futures watchlist returned nothing for the main US index futures** (#98):
+  `FUTURES_WATCHLIST` used exchange prefixes TradingView's scanner doesn't
+  index (`CME:ES1!` instead of `CME_MINI:ES1!`, likewise NQ, RTY, YM and EMD,
+  plus livestock under `CBOT` instead of `CME`). A wrong prefix returns 0
+  rows without an error, so `futures_watchlist`, `futures_category_snapshot`
+  and `futures_market_overview` were silently empty for those contracts.
+- **Stale US stock coinlists** (#96): `nasdaq.txt` and `nyse.txt` hadn't been
+  refreshed since 2025. About 1,500 entries were no longer listed on that
+  venue, about 1,600 newer listings were missing, and 18 tickers had moved
+  venue (WMT, AZN, KHC, ETSY, QBTS, QS and others), which broke error
+  suggestions, venue fallback and exchange-level scan coverage. Regenerated
+  from the scanner.
+
+### Added
+- `scripts/refresh_us_coinlists.py` rebuilds the US stock coinlists from the
+  scanner. `--check` reports drift without writing (exit 1 if stale), and a
+  guard refuses to write a list that shrank suspiciously.
 
 ## [0.9.0] - 2026-08-26
 
