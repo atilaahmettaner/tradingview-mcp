@@ -122,38 +122,14 @@ mcp = FastMCP(
         "agriculture, rates, forex, crypto futures). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, futures_market_overview, futures_top_movers, "
-        "futures_category_snapshot, futures_watchlist, fxmacrodata_release_calendar, "
-        "egx_market_overview, and more."
+        "futures_category_snapshot, futures_watchlist, egx_market_overview, and more. "
+        "Macro context: fxmacrodata_release_calendar lists scheduled official "
+        "economic releases (CPI, payrolls, central-bank decisions) per currency."
     ),
 )
 
 
 # ── Screener tools ─────────────────────────────────────────────────────────────
-
-@mcp.tool(annotations=ToolAnnotations(title="FXMacroData Release Calendar", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
-async def fxmacrodata_release_calendar(
-    currency: str = "usd",
-    limit: int = 25,
-    min_tier: Optional[int] = 1,
-) -> dict:
-    """Get official macro release-calendar events from FXMacroData.
-
-    Use this tool before planning forex, futures, equity-index, or crypto trades
-    around market-moving macro events such as CPI, payrolls, GDP, PCE, retail
-    sales, and central-bank decisions.
-
-    Args:
-        currency: ISO currency code, e.g. usd, eur, gbp, jpy, aud.
-        limit: Number of scheduled events to fetch, capped at 100.
-        min_tier: Optional market-tier filter. Use 1 for top-tier events, 2 for
-            high and medium impact, or null to return all fetched events.
-    """
-    return await get_release_calendar(
-        currency=currency,
-        limit=limit,
-        min_tier=min_tier,
-    )
-
 
 @mcp.tool(annotations=ToolAnnotations(title="Top Gainers Screener", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
 async def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict] | dict:
@@ -811,6 +787,39 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
             ),
         },
     }
+
+
+# ── Macro release calendar ─────────────────────────────────────────────────────
+
+@mcp.tool(annotations=ToolAnnotations(title="FXMacroData Release Calendar", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+async def fxmacrodata_release_calendar(
+    currency: str = "usd",
+    limit: int = 25,
+    min_tier: Optional[int] = 1,
+) -> dict:
+    """Get official macro release-calendar events from FXMacroData.
+
+    Use this tool before planning forex, futures, equity-index, or crypto trades
+    around market-moving macro events such as CPI, payrolls, GDP, PCE, retail
+    sales, and central-bank decisions.
+
+    Args:
+        currency: ISO currency code, e.g. usd, eur, gbp, jpy, aud.
+        limit: Number of scheduled events to fetch, capped at 100.
+        min_tier: Optional market-tier filter. Use 1 for top-tier events, 2 for
+            high and medium impact, or null to return all fetched events.
+
+    Returns:
+        Dict with currency, timezone, data_quality and events, or an error
+        envelope ``{"error": {"code": ..., "retryable": ...}}`` on an invalid
+        currency or an upstream failure. Without FXMACRODATA_API_KEY set, only
+        USD is available.
+    """
+    return await get_release_calendar(
+        currency=currency,
+        limit=limit,
+        min_tier=min_tier,
+    )
 
 
 # ── Backtest tools ─────────────────────────────────────────────────────────────
