@@ -169,3 +169,15 @@ async def test_non_json_body_returns_error(mock_http):
     result = await get_release_calendar("usd")
 
     assert result["error"]["code"] == "UPSTREAM_ERROR"
+
+
+@pytest.mark.parametrize(
+    "body", [{"detail": "Not Found"}, {"data": {"indicator": "inflation"}}, []]
+)
+async def test_malformed_body_returns_error(mock_http, body):
+    mock_http(lambda req: httpx.Response(200, json=body))
+
+    result = await get_release_calendar("usd")
+
+    assert result["error"]["code"] == "UPSTREAM_ERROR"
+    assert result["error"]["retryable"] is False

@@ -125,7 +125,10 @@ async def get_release_calendar(
             currency=currency,
             retryable=True,
         )
-    if not isinstance(payload, dict):
+    events = (payload.get("data") or []) if isinstance(payload, dict) else None
+    if not isinstance(events, list) or (
+        "detail" in payload and "data" not in payload
+    ):
         return make_error(
             ErrorCode.UPSTREAM_ERROR,
             "FXMacroData returned an unexpected response shape",
@@ -133,7 +136,6 @@ async def get_release_calendar(
             retryable=False,
         )
 
-    events = payload.get("data") or []
     if min_tier is not None:
         filtered = []
         for event in events:
