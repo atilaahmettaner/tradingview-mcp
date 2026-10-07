@@ -51,6 +51,10 @@ STOCK_EXCHANGES: Set[str] = {
     "tsxv", "xsx", "ventures",          # TSX Venture Exchange
     "xetra", "xetr",                    # Xetra
     "fwb", "fra",                       # Börse Frankfurt
+    # India + Indonesia
+    "nse",                              # National Stock Exchange of India
+    "bse",                              # BSE (Bombay Stock Exchange)
+    "idx",                              # Indonesia Stock Exchange
 }
 
 EXCHANGE_SCREENER = {
@@ -108,6 +112,9 @@ EXCHANGE_SCREENER = {
     "tsxv": "canada", "xsx": "canada", "ventures": "canada",  # TSX Venture
     "xetra": "germany", "xetr": "germany",                    # Xetra
     "fwb": "germany", "fra": "germany",                       # Börse Frankfurt
+    # ── India + Indonesia ──
+    "nse": "india", "bse": "india",
+    "idx": "indonesia",
 }
 
 # Venues TradingView serves for single-symbol TA (tradingview-ta) but NOT via the
@@ -167,6 +174,9 @@ _EXCHANGE_TV_PREFIX: dict = {
     # Xetra and Frankfurt are different venues with different prices.
     "xetra": "XETR", "xetr": "XETR",
     "fwb": "FWB", "fra": "FWB",
+    # ── India + Indonesia ──
+    "nse": "NSE", "bse": "BSE",
+    "idx": "IDX",
 }
 
 # Exchange aliases that read their venue's coinlist instead of shipping a
@@ -214,6 +224,13 @@ _TRADINGVIEW_SYMBOL_ALIASES: dict = {
     "SI1!": "TVC:SILVER", "SIL1!": "TVC:SILVER", "SIUSD": "TVC:SILVER",
     "PL1!": "TVC:PLATINUM", "XPTUSD": "TVC:PLATINUM",
     "PA1!": "TVC:PALLADIUM", "XPDUSD": "TVC:PALLADIUM",
+    # Benchmark indices by their common and Yahoo names, so "analyze NIFTY"
+    # works whatever exchange the caller guessed (the screener follows the
+    # resolved prefix).
+    "NIFTY": "NSE:NIFTY", "NIFTY50": "NSE:NIFTY", "^NSEI": "NSE:NIFTY",
+    "BANKNIFTY": "NSE:BANKNIFTY", "^NSEBANK": "NSE:BANKNIFTY",
+    "SENSEX": "BSE:SENSEX", "^BSESN": "BSE:SENSEX",
+    "JKSE": "IDX:COMPOSITE", "^JKSE": "IDX:COMPOSITE", "IHSG": "IDX:COMPOSITE",
 }
 
 # "Soft" commodity aliases: bare tickers that ALSO exist as real equities/indices

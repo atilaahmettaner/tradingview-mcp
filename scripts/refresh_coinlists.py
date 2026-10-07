@@ -9,7 +9,7 @@ in December 2025), delisted, or listed since. See #96.
 
 This rebuilds each file as exactly the set of tickers the scanner serves for
 that venue, so every entry is one the tools can actually answer for. Covers
-the US venues plus the European and Canadian ones added in #95.
+the US venues plus the European, Canadian, Indian and Indonesian ones.
 
     uv run python scripts/refresh_coinlists.py           # rewrite the files
     uv run python scripts/refresh_coinlists.py --check   # report drift only; exit 1 if stale
@@ -29,11 +29,11 @@ STOCKS = ("stock", "dr")
 # Coinlist (file stem, upper-cased) -> (scanner market, venue as the scanner
 # names it, instrument types to keep; None keeps every type).
 #
-# The US lists keep every type the scanner serves there, as before. European
-# and Canadian venues are dominated by ETPs and funds (3,199 of Euronext
-# Paris's 3,811 rows are funds), so they keep stocks and depositary receipts:
-# otherwise "top gainers on LSE" would mostly rank leveraged ETPs. The four
-# Euronext venues share the EURONEXT prefix and differ only by market.
+# The US lists keep every type the scanner serves there, as before. Every
+# other venue keeps stocks and depositary receipts only: European listings are
+# dominated by ETPs and funds (3,199 of Euronext Paris's 3,811 rows are funds),
+# and without the filter "top gainers on LSE" would mostly rank leveraged ETPs.
+# The four Euronext venues share the EURONEXT prefix and differ only by market.
 VENUES = {
     "NASDAQ": ("america", "NASDAQ", None),
     "NYSE": ("america", "NYSE", None),
@@ -49,6 +49,9 @@ VENUES = {
     "TSXV": ("canada", "TSXV", STOCKS),
     "XETRA": ("germany", "XETR", STOCKS),
     "FWB": ("germany", "FWB", STOCKS),
+    "NSE": ("india", "NSE", STOCKS),
+    "BSE": ("india", "BSE", STOCKS),
+    "IDX": ("indonesia", "IDX", STOCKS),
 }
 
 
