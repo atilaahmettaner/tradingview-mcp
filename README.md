@@ -486,6 +486,7 @@ Example prompt: "Compare all 9 strategies on MSFT for 2 years"
 | **EGX (Egypt)** | `egx_market_overview`, `egx_stock_screener`, `egx_trade_plan`, `egx_fibonacci_retracement` |
 | **Turkish (BIST)** | Via TradingView screener |
 | **Europe & Canada** | Euronext (Paris, Amsterdam, Brussels, Lisbon), LSE, Xetra, Frankfurt, Milan, SIX, Madrid, TSX, TSX Venture |
+| **India & Indonesia** | NSE, BSE (NIFTY, BANKNIFTY, SENSEX), IDX (Jakarta Composite) |
 
 ---
 
@@ -534,7 +535,7 @@ Every sponsor directly funds new features like Walk-Forward Backtesting, Twitter
 ## 📋 Roadmap
 
 - [x] TradingView technical analysis (30+ indicators)
-- [x] Multi-exchange screener (Binance, KuCoin, MEXC, EGX, US, European and Canadian stocks)
+- [x] Multi-exchange screener (Binance, KuCoin, MEXC, EGX, US, European, Canadian, Indian and Indonesian stocks)
 - [x] Reddit sentiment analysis
 - [x] Live financial news (Yahoo / MarketWatch / CNBC / CoinDesk / CoinTelegraph)
 - [x] Yahoo Finance real-time prices

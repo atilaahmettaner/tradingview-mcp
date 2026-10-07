@@ -26,6 +26,11 @@ All notable changes to this project will be documented in this file.
   from the scanner.
 
 ### Added
+- **India and Indonesia**: NSE, BSE and IDX route to their TradingView markets
+  and ship scanner-built coinlists (stocks and depositary receipts) for
+  exchange-level scans. The benchmark indices resolve by name whatever exchange
+  the caller passes: `NIFTY` / `NIFTY50` / `^NSEI`, `BANKNIFTY` / `^NSEBANK`,
+  `SENSEX` / `^BSESN`, and `JKSE` / `^JKSE` / `IHSG` for the Jakarta Composite.
 - **European and Canadian stock exchanges** (#95, thanks @Zulimon): Euronext
   Paris, Amsterdam, Brussels and Lisbon (`EPA`, `AMS`, `BRU`, `LIS`), Borsa
   Italiana (`MIL`), London (`LSE`), SIX (`SIX`), Madrid (`BME`), Xetra
