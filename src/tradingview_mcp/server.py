@@ -65,6 +65,10 @@ from tradingview_mcp.core.services.yahoo_finance_service import (
     get_price_async,
     get_market_snapshot,
 )
+from tradingview_mcp.core.services.shariah_service import (
+    screen_shariah,
+    screen_shariah_bulk,
+)
 from tradingview_mcp.core.services.bitcoin_market_service import get_bitcoin_market_pulse
 from tradingview_mcp.core.services.extended_hours_service import (
     get_extended_hours_price,
@@ -121,7 +125,8 @@ mcp = FastMCP(
         "agriculture, rates, forex, crypto futures). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, futures_market_overview, futures_top_movers, "
-        "futures_category_snapshot, futures_watchlist, egx_market_overview, and more."
+        "futures_category_snapshot, futures_watchlist, check_shariah_compliance, "
+        "egx_market_overview, and more."
     ),
 )
 
@@ -894,6 +899,46 @@ def market_snapshot() -> dict:
     Powered by Yahoo Finance.
     """
     return get_market_snapshot()
+
+
+@mcp.tool(annotations=ToolAnnotations(title="AAOIFI-Style Stock Screen", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def check_shariah_compliance(symbol: str) -> dict:
+    """Run an informational AAOIFI-style business and financial-ratio screen.
+
+    This automated screen uses AAOIFI Standard No. 21-style thresholds. Its
+    ``halal`` / ``haram`` labels are screening results, not a religious ruling
+    or fatwa.
+
+    Args:
+        symbol: Yahoo Finance stock ticker, such as AAPL, MSFT, THYAO.IS, or 2222.SR
+
+    Returns:
+        Informational screening report with methodology, business-activity
+        checks, financial ratios, purification estimate, warnings, and disclaimer.
+    """
+    return screen_shariah(normalize_yahoo_symbol(symbol))
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Bulk AAOIFI-Style Stock Screen", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def check_shariah_compliance_bulk(symbols: str) -> dict:
+    """Run an informational AAOIFI-style ratio screen for up to 20 stocks.
+
+    This automated screen uses AAOIFI Standard No. 21-style thresholds. Its
+    ``halal`` / ``haram`` labels are screening results, not a religious ruling
+    or fatwa.
+
+    Args:
+        symbols: Comma-separated Yahoo Finance tickers, such as AAPL,MSFT,JPM,TSLA
+
+    Returns:
+        Methodology, summary counts, and one informational report per symbol.
+    """
+    symbol_list = [
+        normalize_yahoo_symbol(symbol)
+        for symbol in symbols.split(",")
+        if symbol.strip()
+    ]
+    return screen_shariah_bulk(symbol_list)
 
 
 @mcp.tool(annotations=ToolAnnotations(title="Bitcoin Market Pulse", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
