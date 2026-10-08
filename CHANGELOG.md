@@ -26,6 +26,11 @@ All notable changes to this project will be documented in this file.
   from the scanner.
 
 ### Added
+- **Proxy provider presets**: `PROXY_PROVIDER` picks host, port and the
+  username format for the sticky session id (`webshare`, the default and
+  unchanged, and `nodemaven`). `PROXY_USERNAME_TEMPLATE` with `{prefix}` and
+  `{session}` covers any other gateway. `PROXY_HOST` / `PROXY_PORT` still
+  override the preset.
 - **India and Indonesia**: NSE, BSE and IDX route to their TradingView markets
   and ship scanner-built coinlists (stocks and depositary receipts) for
   exchange-level scans. The benchmark indices resolve by name whatever exchange
