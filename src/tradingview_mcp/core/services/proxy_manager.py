@@ -1,14 +1,24 @@
 """
 Proxy Manager Service for tradingview-mcp.
 
-Reads Webshare proxy credentials from ENVIRONMENT VARIABLES only.
+Reads proxy credentials from ENVIRONMENT VARIABLES only.
 Never hardcode credentials in this file.
 
-Setup:
+Setup (Webshare, the default):
     export PROXY_HOST=p.webshare.io
     export PROXY_PORT=80
     export PROXY_USERNAME_PREFIX=hvfvdamo   # your username prefix
     export PROXY_PASSWORD=your_password_here
+
+Other residential gateways put the sticky session id somewhere else in the
+username. PROXY_PROVIDER picks a preset for host, port and username format:
+
+    export PROXY_PROVIDER=nodemaven
+    export PROXY_USERNAME_PREFIX=your_login-country-us   # targeting goes here
+    export PROXY_PASSWORD=your_password_here
+
+PROXY_HOST and PROXY_PORT still override the preset, and
+PROXY_USERNAME_TEMPLATE (with {prefix} and {session}) covers any other gateway.
 
 Or create a .env file (see .env.example) — never commit .env to git.
 
@@ -52,10 +62,51 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+# Host, port and username format per gateway. {session} is the sticky session
+# id: the same id keeps the same exit IP, a new id gets a new one.
+PROVIDERS: dict[str, dict[str, str]] = {
+    "webshare": {"host": "p.webshare.io", "port": "80",
+                 "template": "{prefix}-{session}"},
+    "nodemaven": {"host": "gate.nodemaven.com", "port": "8080",
+                  "template": "{prefix}-sid-{session}"},
+}
+DEFAULT_PROVIDER = "webshare"
+
+
+def _note(message: str) -> None:
+    import sys
+    print(f"[tradingview_mcp] {message}", file=sys.stderr)
+
+
+def _provider() -> dict[str, str]:
+    name = os.environ.get("PROXY_PROVIDER", "").strip().lower() or DEFAULT_PROVIDER
+    if name not in PROVIDERS:
+        _note(f"unknown PROXY_PROVIDER={name!r}, using {DEFAULT_PROVIDER!r} "
+              f"(known: {', '.join(sorted(PROVIDERS))})")
+        name = DEFAULT_PROVIDER
+    return PROVIDERS[name]
+
+
+def _username_template(default: str) -> str:
+    """PROXY_USERNAME_TEMPLATE, or the preset's. A template without both
+    placeholders would drop the login or pin every request to one exit, so it
+    falls back with a stderr note instead."""
+    template = os.environ.get("PROXY_USERNAME_TEMPLATE", "")
+    if not template:
+        return default
+    if "{prefix}" not in template or "{session}" not in template:
+        _note(f"ignoring PROXY_USERNAME_TEMPLATE={template!r}: it needs both "
+              f"{{prefix}} and {{session}}, using {default!r}")
+        return default
+    return template
+
+
 def _cfg() -> dict:
+    preset = _provider()
     return {
-        "host":    os.environ.get("PROXY_HOST", "p.webshare.io"),
-        "port":    os.environ.get("PROXY_PORT", "80"),
+        "host":    os.environ.get("PROXY_HOST", preset["host"]),
+        "port":    os.environ.get("PROXY_PORT", preset["port"]),
+        "template": _username_template(preset["template"]),
         "prefix":  os.environ.get("PROXY_USERNAME_PREFIX", ""),
         "password": os.environ.get("PROXY_PASSWORD", ""),
         "enabled": os.environ.get("PROXY_ENABLED", "true").lower() == "true",
@@ -78,7 +129,9 @@ def get_proxy_url() -> Optional[str]:
     session_id = random.randint(c["min"], c["max"])
     # URL-encode credentials: a password containing @ : / or # would
     # otherwise produce a proxy URL that parses to the wrong host/auth.
-    user = urllib.parse.quote(f"{c['prefix']}-{session_id}", safe="")
+    username = c["template"].replace("{prefix}", c["prefix"]).replace(
+        "{session}", str(session_id))
+    user = urllib.parse.quote(username, safe="")
     pwd = urllib.parse.quote(c["password"], safe="")
     return f"http://{user}:{pwd}@{c['host']}:{c['port']}"
 
