@@ -131,7 +131,7 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 | **Setup Time** | 5 minutes | Hours (Docker, Conda...) | Weeks (Contracts) |
 | **Cost** | Free & Open Source | Variable | $30k+/year |
 | **Backtesting** | ✅ 9 strategies + Walk-forward + Sharpe | ❌ Manual scripting | ✅ Proprietary |
-| **Live Sentiment** | ✅ Reddit + RSS news | ❌ Separate setup | ✅ Terminal |
+| **News & Sentiment** | ✅ Licensed news + per-ticker sentiment (Marketaux) | ❌ Separate setup | ✅ Terminal |
 | **Market Data** | ✅ Live / Real-Time | Historical / Delayed | Live |
 | **API Keys** | **None required** | Multiple (OpenAI, etc.) | N/A |
 
