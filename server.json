@@ -1,17 +1,26 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.atilaahmettaner/tradingview-mcp",
-  "description": "Real-time market data, screeners, technical analysis & backtesting for stocks, crypto and forex.",
+  "title": "TradingMCP",
+  "description": "Market analysis for AI assistants: screeners, multi-timeframe analysis, backtests, in-chat charts.",
   "repository": {
     "url": "https://github.com/atilaahmettaner/tradingview-mcp",
     "source": "github"
   },
   "version": "0.9.0",
-  "websiteUrl": "https://pro.cryptosieve.com",
+  "websiteUrl": "https://tradingmcp.ai",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.cryptosieve.com/mcp"
+      "url": "https://mcp.cryptosieve.com/mcp",
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "description": "Your TradingMCP API key, from your setup page at tradingmcp.ai. Tool calls need it; the handshake and tool list do not.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }

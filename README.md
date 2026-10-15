@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.atilaahmettaner/tradingview-mcp -->
 # TradingView MCP Market Data & Technical Analysis for AI Assistants
 
 <p align="center">

@@ -1,7 +1,7 @@
 [project]
 name = "tradingview-mcp-server"
 version = "0.9.0"
-description = "Advanced AI Trading Intelligence Framework — MCP server with walk-forward backtesting, trade logs, equity curves, 1h timeframe, sentiment, Yahoo Finance, and 30+ technical analysis tools"
+description = "MCP server that gives AI assistants market analysis: screeners, multi-timeframe technical analysis, walk-forward backtests and sentiment for crypto, stocks, forex and futures (39 tools)"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 authors = [
