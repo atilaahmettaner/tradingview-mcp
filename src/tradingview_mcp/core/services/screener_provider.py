@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple
 from ..utils.validators import get_market_type
+from .indicators import AVERAGE_VOLUME, RELATIVE_VOLUME
 import json as _json
 import os as _os
 import random as _random
@@ -414,20 +415,29 @@ def _scan_with_retry(
     raise RuntimeError(_format_transient_error(last_exc, len(delays), total_wait)) from last_exc
 
 
+# Scanner columns the indicator helpers read that tradingview_ta doesn't
+# request: the volume baseline (TradingView has no volume-SMA column).
+# tradingview_ta adds the interval suffix to them, as to its own columns.
+TA_EXTRA_COLUMNS = (RELATIVE_VOLUME, AVERAGE_VOLUME)
+
+
 def resilient_get_multiple_analysis(screener, interval, symbols):
     """Drop-in replacement for tradingview_ta.get_multiple_analysis with the
     same resilience layer used by the screener calls (retry + cache + stale
     fallback). Required because coin_analysis / combined_analysis /
     multi_timeframe_analysis use tradingview_ta directly and hit the same
     transient JSON errors when TradingView's scanner endpoint returns an
-    empty body."""
+    empty body.
+
+    Every request also asks for ``TA_EXTRA_COLUMNS``, which land in each
+    ``Analysis.indicators`` under their bare names."""
     try:
         from tradingview_ta import get_multiple_analysis as _gma  # type: ignore
     except Exception as e:
         raise ImportError("tradingview_ta is not installed") from e
 
     sym_key = tuple(sorted(symbols)) if symbols else ()
-    cache_key = ('ta_multi_v1', screener, interval, sym_key)
+    cache_key = ('ta_multi_v2', screener, interval, sym_key)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -451,6 +461,7 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
                     screener=screener,
                     interval=interval,
                     symbols=symbols,
+                    additional_indicators=list(TA_EXTRA_COLUMNS),
                     timeout=_socket_timeout_s(),
                 )
             finally:

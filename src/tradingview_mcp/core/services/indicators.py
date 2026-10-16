@@ -1,6 +1,13 @@
 from __future__ import annotations
 from typing import Dict, Optional, Tuple
 
+# Volume baseline. TradingView has no volume-SMA column: every volume ratio
+# below used to divide by "volume.SMA20", which the TA fetch never returned, so
+# the ratios, volume signals and volume points were silently missing. The TA
+# fetch now adds these two scanner columns (screener_provider.TA_EXTRA_COLUMNS).
+RELATIVE_VOLUME = "relative_volume_10d_calc"  # bar volume / mean of the previous 10 bars
+AVERAGE_VOLUME = "average_volume_10d_calc"    # mean volume of the last 10 bars
+
 
 def compute_change(open_price: float, close: float) -> float:
     return ((close - open_price) / open_price) * 100 if open_price else 0.0
@@ -240,11 +247,9 @@ def extract_extended_indicators(indicators: Dict) -> Dict:
     }
 
     # --- Volume ---
-    volume_sma20 = indicators.get("volume.SMA20")
-    volume_ratio = None
+    volume_ratio = indicators.get(RELATIVE_VOLUME) if volume is not None else None
     volume_signal = "Normal"
-    if volume is not None and volume_sma20 and volume_sma20 > 0:
-        volume_ratio = volume / volume_sma20
+    if volume_ratio is not None:
         if volume_ratio >= 3.0:
             volume_signal = "Very High"
         elif volume_ratio >= 2.0:
@@ -258,7 +263,10 @@ def extract_extended_indicators(indicators: Dict) -> Dict:
 
     volume_data = {
         "current": _safe_round(volume, 0),
-        "average_20": _safe_round(volume_sma20, 0),
+        # Kept for clients that read the key: TradingView has no 20-bar
+        # average, and this was always null.
+        "average_20": None,
+        "average_10": _safe_round(indicators.get(AVERAGE_VOLUME), 0),
         "ratio": _safe_round(volume_ratio, 2),
         "signal": volume_signal,
     }
@@ -705,7 +713,7 @@ def analyze_timeframe_context(indicators: Dict, timeframe: str) -> Dict:
     macd_signal = indicators.get("MACD.signal")
     adx = indicators.get("ADX")
     volume = indicators.get("volume")
-    volume_sma20 = indicators.get("volume.SMA20")
+    rel_volume = indicators.get(RELATIVE_VOLUME)
     vwap = indicators.get("VWAP")
 
     # Determine bias
@@ -751,10 +759,8 @@ def analyze_timeframe_context(indicators: Dict, timeframe: str) -> Dict:
                 bias_reasons.append(f"RSI {_safe_round(rsi,1)} overbought - avoid new longs")
             elif rsi < 30:
                 bias_reasons.append(f"RSI {_safe_round(rsi,1)} oversold - potential bounce")
-        if volume and volume_sma20 and volume_sma20 > 0:
-            ratio = volume / volume_sma20
-            if ratio >= 1.5:
-                bias_reasons.append(f"Volume {ratio:.1f}x above average (breakout confirmation)")
+        if volume and rel_volume is not None and rel_volume >= 1.5:
+            bias_reasons.append(f"Volume {rel_volume:.1f}x above average (breakout confirmation)")
         advice = "Trade pullbacks in trend (not extremes). Look for confluence: EMA + support + RSI."
 
     elif timeframe == "4h":
@@ -786,10 +792,8 @@ def analyze_timeframe_context(indicators: Dict, timeframe: str) -> Dict:
             else:
                 bias = "Bearish"
                 bias_reasons.append(f"Price below 20 EMA (dynamic resistance at {_safe_round(ema20,2)})")
-        if volume and volume_sma20 and volume_sma20 > 0:
-            ratio = volume / volume_sma20
-            if ratio >= 2.0:
-                bias_reasons.append(f"Volume spike: {ratio:.1f}x (breakout confirmation)")
+        if volume and rel_volume is not None and rel_volume >= 2.0:
+            bias_reasons.append(f"Volume spike: {rel_volume:.1f}x (breakout confirmation)")
         if vwap is not None and close:
             if close > vwap:
                 bias_reasons.append(f"Above VWAP ({_safe_round(vwap,2)}) - institutional bullish")
@@ -942,11 +946,9 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
 
     # B5. Volume Confirmation — 10 pts
     volume = indicators.get("volume")
-    vol_sma20 = indicators.get("volume.SMA20")
     vol_pts = 0
-    vol_ratio = None
-    if volume and vol_sma20 and vol_sma20 > 0:
-        vol_ratio = volume / vol_sma20
+    vol_ratio = indicators.get(RELATIVE_VOLUME) if volume else None
+    if vol_ratio is not None:
         if vol_ratio >= 1.5:
             vol_pts = 10
             signals.append(f"Volume {vol_ratio:.1f}x above avg (strong participation)")
@@ -1085,7 +1087,8 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
         penalties.append("Very low relative volume (-10)")
 
     # ── Liquidity Assessment ──────────────────────────────────────────────
-    avg_vol = vol_sma20 if vol_sma20 and vol_sma20 > 0 else (volume if volume else None)
+    avg_volume = indicators.get(AVERAGE_VOLUME)
+    avg_vol = avg_volume if avg_volume and avg_volume > 0 else (volume if volume else None)
     avg_value_20d = (avg_vol * close) if avg_vol and close else None
     liquidity_ok = True       # passes hard gate for Strong/Elite
     liquidity_cap = None      # hard grade cap (None = no cap)
@@ -1423,7 +1426,8 @@ def compute_trade_quality(indicators: Dict, trade_setup: Dict) -> Dict:
     ema200 = indicators.get("EMA200")
     adx = indicators.get("ADX")
     volume = indicators.get("volume")
-    vol_sma20 = indicators.get("volume.SMA20")
+    rel_volume = indicators.get(RELATIVE_VOLUME)
+    avg_volume = indicators.get(AVERAGE_VOLUME)
 
     total = 0
     breakdown = {}
@@ -1474,14 +1478,13 @@ def compute_trade_quality(indicators: Dict, trade_setup: Dict) -> Dict:
 
     # ── Volume Confirmation — 20 pts ──────────────────────────────────────
     vol_pts = 0
-    if volume and vol_sma20 and vol_sma20 > 0:
-        ratio = volume / vol_sma20
-        if ratio >= 1.5:
+    if volume and rel_volume is not None:
+        if rel_volume >= 1.5:
             vol_pts = 20
-            notes.append(f"Strong volume participation ({ratio:.1f}x)")
-        elif ratio >= 1.2:
+            notes.append(f"Strong volume participation ({rel_volume:.1f}x)")
+        elif rel_volume >= 1.2:
             vol_pts = 14
-        elif ratio >= 1.0:
+        elif rel_volume >= 1.0:
             vol_pts = 8
         else:
             vol_pts = 0
@@ -1509,13 +1512,13 @@ def compute_trade_quality(indicators: Dict, trade_setup: Dict) -> Dict:
 
     # ── Liquidity — 10 pts ────────────────────────────────────────────────
     liq_pts = 0
-    if volume and vol_sma20:
+    if volume and avg_volume:
         # Use average volume as liquidity proxy
-        if vol_sma20 >= 500000:
+        if avg_volume >= 500000:
             liq_pts = 10
-        elif vol_sma20 >= 100000:
+        elif avg_volume >= 100000:
             liq_pts = 7
-        elif vol_sma20 >= 50000:
+        elif avg_volume >= 50000:
             liq_pts = 4
         else:
             liq_pts = 0

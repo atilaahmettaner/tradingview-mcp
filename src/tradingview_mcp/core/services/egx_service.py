@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.indicators import (
+    AVERAGE_VOLUME,
+    RELATIVE_VOLUME,
     compute_metrics,
     extract_extended_indicators,
     compute_stock_score,
@@ -397,8 +399,12 @@ def run_egx_sector_scanner(
                 rsis.append(rsi)
 
             vol = ind.get("volume", 0) or 0
-            vol_sma = ind.get("volume.SMA20", 0) or 0
-            net_volume_flow += vol - vol_sma
+            rel_vol = ind.get(RELATIVE_VOLUME)
+            if vol and rel_vol:
+                # Volume above (+) or below (-) the mean of the previous 10 bars.
+                # It used to subtract a "volume.SMA20" that was never fetched,
+                # so every sector's flow was the raw volume: always positive.
+                net_volume_flow += vol - vol / rel_vol
 
             if sym in stock_scores:
                 sc = stock_scores[sym]
@@ -825,9 +831,9 @@ def screen_egx_stocks(
             if not metrics:
                 continue
 
-            vol_sma = ind.get("volume.SMA20")
+            avg_volume = ind.get(AVERAGE_VOLUME)
             liquidity_status = "Pass"
-            if vol_sma and vol_sma < 10000:
+            if avg_volume and avg_volume < 10000:
                 liquidity_status = "Fail — Very Low"
                 if min_score >= 55:
                     continue
@@ -1141,8 +1147,8 @@ def analyze_egx_fibonacci(
     rsi_val = ind.get("RSI")
     atr_val = ind.get("ATR")
     vol = ind.get("volume")
-    vol_sma = ind.get("volume.SMA20")
-    vol_ratio = round(vol / vol_sma, 2) if vol and vol_sma and vol_sma > 0 else None
+    rel_vol = ind.get(RELATIVE_VOLUME)
+    vol_ratio = round(rel_vol, 2) if vol and rel_vol is not None else None
     change_pct = (
         round(((close - ind.get("open", close)) / ind.get("open", close)) * 100, 2)
         if ind.get("open")

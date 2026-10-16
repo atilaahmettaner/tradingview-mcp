@@ -194,7 +194,7 @@ def test_resilient_ta_returns_stale_on_persistent_failure(fast_retry, monkeypatc
 
     # Manually expire the FRESH window so the next call must re-fetch,
     # but stale window still holds.
-    cache_key = ("ta_multi_v1", "egypt", "1D", ("EGX:ASCM",))
+    cache_key = ("ta_multi_v2", "egypt", "1D", ("EGX:ASCM",))
     with sp._SCREENER_CACHE_LOCK:
         ts, payload = sp._SCREENER_CACHE[cache_key]
         sp._SCREENER_CACHE[cache_key] = (ts - 120.0, payload)

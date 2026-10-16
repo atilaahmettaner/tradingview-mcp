@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **No volume baseline in the TA-based tools** (`coin_analysis`,
+  `multi_timeframe_analysis`, the stock score and trade quality, and the EGX
+  tools): the indicator helpers divided by a `volume.SMA20` column that
+  tradingview_ta never requests and TradingView's scanner doesn't have. The
+  effects:
+  - `volume_analysis` always had a null ratio and a "Normal" signal.
+  - The timeframe context never mentioned volume.
+  - The stock score's volume points, breakout bonus and low-volume penalty
+    never applied, nor did trade quality's volume and liquidity points.
+  - `egx_sector_scanner` showed every sector's flow as "Inflow".
+  - `egx_stock_screener`'s liquidity filter never fired.
+  - `egx_fibonacci_retracement` always returned a null volume ratio.
+
+  The TA fetch now also requests `relative_volume_10d_calc` (the bar's volume
+  over the mean of the previous 10 bars) and `average_volume_10d_calc` (mean
+  volume of the last 10 bars), and the helpers use them. Stock scores and trade
+  quality scores change accordingly. `volume_analysis` gains `average_10`, and
+  `average_20` stays as a null key for compatibility.
 - **Volume tools never saw a volume baseline** (`volume_breakout_scanner`,
   `smart_volume_scanner`, `volume_confirmation_analysis`): the volume ratio
   was computed from a `volume.SMA20` column that was never fetched.
