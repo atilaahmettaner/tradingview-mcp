@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **US-stock scans failed or timed out** (`top_gainers`, `top_losers`,
+  `rating_filter`, `bollinger_scan`): the scans called `get_multiple_analysis`
+  in 200-symbol batches, each asking for ~90 indicator columns, so NASDAQ
+  (~5,000 tickers) took 25 requests and NYSE 14. The burst ran past the 30s
+  scan budget (`PARTIAL_DATA`) or tripped TradingView's empty-body throttling
+  (`ALL_BATCHES_FAILED`), so most NASDAQ/NYSE scans failed, and
+  `bollinger_scan`, which has no budget, could run for minutes. Each scan is
+  now a single scanner request for the eight columns it reads (about a second
+  for NASDAQ), with the same retry, 60s cache and stale-while-error fallback.
+  Results are unchanged.
 - **TradingView interval codes rejected as timeframes**: `"60"`, `"240"`,
   `"15"`, `"5"`, `"1440"`, `"D"` and `"W"` are now accepted and mapped to
   `1h`, `4h`, `15m`, `5m` and `1D` / `1W`. Integrations sending TradingView's

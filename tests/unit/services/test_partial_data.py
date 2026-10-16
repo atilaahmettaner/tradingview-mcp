@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 from json import JSONDecodeError
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -27,24 +26,25 @@ def _good_analysis(symbols):
         "BB.upper": 115.0, "BB.lower": 95.0,
         "EMA50": 104.0, "RSI": 55.0, "volume": 1_000.0,
     }
-    return {s: SimpleNamespace(indicators=ind) for s in symbols}
+    return {s: dict(ind) for s in symbols}
 
 
 def test_consecutive_failure_abort_raises_partial_with_rows(monkeypatch):
     """Batch 1 succeeds, batches 2-4 cliff → PartialDataError carrying batch 1."""
     monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_MAX_CONSECUTIVE_FAILS", "3")
     monkeypatch.setenv("TRADINGVIEW_MCP_BATCH_BUDGET_S", "3600")
+    monkeypatch.setattr(screener_service, "_SCAN_CHUNK", 200)
 
     calls = {"n": 0}
 
-    def flaky(screener, interval, symbols):
+    def flaky(screener, interval, symbols, columns):
         calls["n"] += 1
         if calls["n"] == 1:
             return _good_analysis(symbols)
         raise JSONDecodeError("Expecting value", "", 0)
 
     symbols = [f"SYM{i}" for i in range(1000)]  # 5 batches of 200
-    with patch.object(screener_service, "get_multiple_analysis", side_effect=flaky), \
+    with patch.object(screener_service, "resilient_scan_columns", side_effect=flaky), \
          patch.object(screener_service, "load_symbols", return_value=symbols):
         with pytest.raises(PartialDataError) as exc_info:
             screener_service.fetch_trending_analysis("KUCOIN", timeframe="15m", limit=500)

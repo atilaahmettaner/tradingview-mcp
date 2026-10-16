@@ -34,7 +34,11 @@ from tradingview_mcp.core.utils.validators import (
 )
 
 # Resilience layer (does not require tradingview_ta; safe to import unconditionally).
-from tradingview_mcp.core.services.screener_provider import _scan_with_retry, humanize_upstream_error
+from tradingview_mcp.core.services.screener_provider import (
+    _scan_with_retry,
+    humanize_upstream_error,
+    resilient_scan_columns,
+)
 
 try:
     # Patched: route through resilience layer (retry + 60s TTL cache).
@@ -104,6 +108,17 @@ def _fill_skipped_tfs(
 
 # ── Bollinger / trending fetchers ──────────────────────────────────────────────
 
+# The only indicator columns the whole-exchange scans read: compute_metrics
+# (open, close, SMA20, BB bands), the IndicatorMap in every row, and the
+# squeeze filter (EMA50, RSI).
+_SCAN_COLUMNS = ["open", "close", "SMA20", "BB.upper", "BB.lower", "EMA50", "RSI", "volume"]
+
+# Symbols per scanner request. The biggest coinlist (nasdaq, ~5,000 tickers)
+# fits in one, so an exchange scan is a single request where it used to be
+# up to 25 batches of 200.
+_SCAN_CHUNK = 5000
+
+
 def fetch_bollinger_analysis(
     exchange: str,
     timeframe: str = "4h",
@@ -111,7 +126,7 @@ def fetch_bollinger_analysis(
     bbw_filter: float = None,
 ) -> List[Row]:
     """
-    Fetch analysis using tradingview_ta with Bollinger Band squeeze logic.
+    Fetch Bollinger Band squeeze candidates for a whole exchange.
 
     Args:
         exchange:   Exchange identifier (e.g. KUCOIN, BINANCE, EGX).
@@ -122,10 +137,10 @@ def fetch_bollinger_analysis(
     Returns:
         List of Row dicts sorted by changePercent descending.
     """
-    if not _TA_AVAILABLE:
+    if not _SCREENER_AVAILABLE:
         raise ScreenerServiceError(
             ErrorCode.DEPENDENCY_MISSING,
-            "tradingview_ta is missing; run `uv sync`.",
+            "tradingview-screener is missing; run `uv sync`.",
             retryable=False,
         )
 
@@ -137,22 +152,18 @@ def fetch_bollinger_analysis(
             exchange=exchange, retryable=False,
         )
 
-    # Scan the FULL symbol list in batches. The old `symbols[: limit * 2]`
-    # truncation meant only the alphabetical head of the exchange was ever
-    # screened — on EGX (292 names, sorted) mid-alphabet symbols could never
-    # appear in squeeze results regardless of their setups.
+    # Scan the FULL symbol list. The old `symbols[: limit * 2]` truncation
+    # meant only the alphabetical head of the exchange was ever screened — on
+    # EGX (292 names, sorted) mid-alphabet symbols could never appear in
+    # squeeze results regardless of their setups.
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
     analysis: dict = {}
-    batch_errors = 0
-    batch_size = 200
-    for i in range(0, len(symbols), batch_size):
-        batch = symbols[i : i + batch_size]
+    for i in range(0, len(symbols), _SCAN_CHUNK):
+        batch = symbols[i : i + _SCAN_CHUNK]
         try:
-            analysis.update(
-                get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
-            )
+            analysis.update(resilient_scan_columns(screener, timeframe, batch, _SCAN_COLUMNS))
         except Exception:
-            batch_errors += 1
+            continue
     if not analysis:
         raise ScreenerServiceError(
             ErrorCode.UPSTREAM_ERROR,
@@ -161,11 +172,8 @@ def fetch_bollinger_analysis(
         )
 
     rows: List[Row] = []
-    for key, value in analysis.items():
+    for key, indicators in analysis.items():
         try:
-            if value is None:
-                continue
-            indicators = value.indicators
             metrics = compute_metrics(indicators)
             if not metrics or metrics.get("bbw") is None:
                 continue
@@ -206,7 +214,8 @@ def fetch_trending_analysis(
     sort: str = "desc",
 ) -> List[Row]:
     """
-    Fetch trending coins across all available symbols in batches of 200.
+    Fetch trending coins across all available symbols, one scanner request
+    per ``_SCAN_CHUNK`` symbols (a single request for every shipped coinlist).
 
     Args:
         exchange:      Exchange identifier.
@@ -222,10 +231,10 @@ def fetch_trending_analysis(
     Returns:
         List of Row dicts sorted by changePercent in the requested order.
     """
-    if not _TA_AVAILABLE:
+    if not _SCREENER_AVAILABLE:
         raise ScreenerServiceError(
             ErrorCode.DEPENDENCY_MISSING,
-            "tradingview_ta is missing; run `uv sync`.",
+            "tradingview-screener is missing; run `uv sync`.",
             retryable=False,
         )
 
@@ -238,7 +247,7 @@ def fetch_trending_analysis(
         )
 
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
-    batch_size = 200
+    batch_size = _SCAN_CHUNK
     all_coins: List[Row] = []
 
     batches_attempted = 0
@@ -273,7 +282,7 @@ def fetch_trending_analysis(
         batch = symbols[i : i + batch_size]
         batches_attempted += 1
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = resilient_scan_columns(screener, timeframe, batch, _SCAN_COLUMNS)
             consecutive_failures = 0  # Reset on any success.
         except Exception as exc:
             batches_failed += 1
@@ -308,11 +317,8 @@ def fetch_trending_analysis(
                 break
             continue
 
-        for key, value in analysis.items():
+        for key, indicators in analysis.items():
             try:
-                if value is None:
-                    continue
-                indicators = value.indicators
                 metrics = compute_metrics(indicators)
                 if not metrics or metrics.get("bbw") is None:
                     continue

@@ -155,7 +155,7 @@ def test_fetch_trending_empty_symbol_list_is_typed(monkeypatch):
 
 def test_fetch_bollinger_missing_dependency_is_typed(monkeypatch):
     from tradingview_mcp.core.services import screener_service
-    monkeypatch.setattr(screener_service, "_TA_AVAILABLE", False)
+    monkeypatch.setattr(screener_service, "_SCREENER_AVAILABLE", False)
     with pytest.raises(ScreenerServiceError) as exc_info:
         screener_service.fetch_bollinger_analysis("kucoin")
     assert exc_info.value.code == ErrorCode.DEPENDENCY_MISSING

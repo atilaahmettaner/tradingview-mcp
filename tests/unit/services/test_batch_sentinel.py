@@ -202,8 +202,9 @@ class TestFetchTrendingAnalysisSentinel:
         def always_fail(*_args, **_kwargs):
             raise JSONDecodeError("Expecting value", "", 0)
 
-        # batch_size=200, so 250 symbols => 2 batches attempted.
-        with patch.object(screener_service, "get_multiple_analysis", side_effect=always_fail), \
+        # 200-symbol chunks over 250 symbols => 2 requests attempted.
+        with patch.object(screener_service, "_SCAN_CHUNK", 200), \
+             patch.object(screener_service, "resilient_scan_columns", side_effect=always_fail), \
              patch.object(screener_service, "load_symbols", return_value=[f"S{i}" for i in range(250)]):
             with pytest.raises(BatchExecutionError) as exc_info:
                 screener_service.fetch_trending_analysis(exchange="KUCOIN", timeframe="15m")
@@ -216,31 +217,27 @@ class TestFetchTrendingAnalysisSentinel:
 
         call_count = {"n": 0}
 
-        def second_fails(*, screener, interval, symbols):
+        def second_fails(screener, interval, symbols, columns):
             call_count["n"] += 1
             if call_count["n"] == 2:
                 raise JSONDecodeError("Expecting value", "", 0)
             # First batch returns rich enough data for compute_metrics to pass.
             return {
-                f"KUCOIN:{s}": _FakeAnalysis(
-                    indicators={
-                        "open": 100.0,
-                        "close": 110.0,
-                        "high": 112.0,
-                        "low": 99.0,
-                        "BB.upper": 115.0,
-                        "BB.lower": 95.0,
-                        "SMA20": 105.0,
-                        "EMA50": 100.0,
-                        "RSI": 55.0,
-                        "volume": 1_000_000.0,
-                        "Recommend.All": 0.2,
-                    }
-                )
+                f"KUCOIN:{s}": {
+                    "open": 100.0,
+                    "close": 110.0,
+                    "BB.upper": 115.0,
+                    "BB.lower": 95.0,
+                    "SMA20": 105.0,
+                    "EMA50": 100.0,
+                    "RSI": 55.0,
+                    "volume": 1_000_000.0,
+                }
                 for s in symbols
             }
 
-        with patch.object(screener_service, "get_multiple_analysis", side_effect=second_fails), \
+        with patch.object(screener_service, "_SCAN_CHUNK", 200), \
+             patch.object(screener_service, "resilient_scan_columns", side_effect=second_fails), \
              patch.object(screener_service, "load_symbols", return_value=[f"S{i}" for i in range(250)]):
             result = screener_service.fetch_trending_analysis(exchange="KUCOIN", timeframe="15m", limit=300)
 

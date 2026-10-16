@@ -337,13 +337,24 @@ def humanize_upstream_error(exc: BaseException) -> str:
     return msg
 
 
-def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
+def _scan_with_retry(
+    q,
+    cookies=None,
+    cache_key: Optional[Tuple] = None,
+    raw: bool = False,
+    throttle: bool = False,
+):
     """Wrap Query.get_scanner_data with retries on transient TV outages.
-    Returns (total, df). Re-raises on non-transient errors or on final failure.
+    Returns (total, df), or the scanner's JSON dict when ``raw`` is True.
+    Re-raises on non-transient errors or on final failure.
 
     If ``cache_key`` is provided and all retries fail, attempts to return a
     stale-but-usable cached payload before raising — callers that pass a key
-    get stale-while-error behavior automatically."""
+    get stale-while-error behavior automatically.
+
+    ``throttle`` holds a tradingview_ta throttle slot for each attempt (not
+    across the backoff sleeps), so heavy whole-exchange scans share the same
+    in-flight cap and start spacing as the per-symbol TA calls."""
     _wait_for_failure_cooldown()
     delays = (0.0,) + _retry_delays()  # immediate try, then back off
     last_exc: Optional[BaseException] = None
@@ -354,7 +365,16 @@ def _scan_with_retry(q, cookies=None, cache_key: Optional[Tuple] = None):
             _time.sleep(wait)
             total_wait += wait
         try:
-            result = q.get_scanner_data(cookies=cookies)
+            if throttle:
+                _ta_throttle_acquire()
+            try:
+                if raw:
+                    result = q.get_scanner_data_raw(cookies=cookies)
+                else:
+                    result = q.get_scanner_data(cookies=cookies)
+            finally:
+                if throttle:
+                    _ta_throttle_release()
             # Populate the cache on success — without this, the advertised
             # stale-while-error fallback below could NEVER fire for callers
             # passing cache_key (nothing was ever stored under it).
@@ -467,6 +487,79 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
         return payload
     assert last_exc is not None
     raise RuntimeError(_format_transient_error(last_exc, len(delays), total_wait)) from last_exc
+
+
+# Column suffix per timeframe, exactly as tradingview_ta builds it: the daily
+# interval is the bare column ("close", not "close|1D", which the scanner
+# answers with null).
+_TA_INTERVAL_SUFFIX = {
+    '5m': '|5',
+    '15m': '|15',
+    '1h': '|60',
+    '4h': '|240',
+    '1D': '',
+    '1W': '|1W',
+    '1M': '|1M',
+}
+
+
+def resilient_scan_columns(
+    screener: str,
+    interval: str,
+    symbols: List[str],
+    columns: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    """Fetch ``columns`` for every symbol in ONE scanner request.
+
+    The lean path for whole-exchange scans. ``get_multiple_analysis`` asks for
+    ~90 indicator columns and the scanners called it in 200-symbol batches, so
+    a NASDAQ scan (~5,000 tickers) took 25 requests. That burst ran past the
+    30s scan budget and tripped TradingView's empty-body throttling. One
+    request for just the needed columns takes about a second.
+
+    Shares the resilience layer: 60s fresh cache, retry with backoff, failure
+    cooldown and the 6h stale-while-error fallback.
+
+    Args:
+        screener: Scanner market (``"america"``, ``"crypto"``, ``"turkey"``, …).
+        interval: Our timeframe string (``5m`` … ``1M``).
+        symbols:  Fully-qualified tickers (``"NASDAQ:AAPL"``).
+        columns:  Bare column names (``"close"``, ``"SMA20"``, …).
+
+    Returns:
+        ``{ticker: {column: value}}`` keyed by the bare column names, like
+        ``Analysis.indicators``. Values the scanner has no data for are
+        ``None``, and tickers it doesn't know are absent.
+    """
+    from tradingview_screener import Query
+
+    if not symbols:
+        return {}
+    suffix = _TA_INTERVAL_SUFFIX.get(interval, '')
+    cache_key = ('scan_columns_v1', screener, suffix, tuple(columns), tuple(symbols))
+    payload = _cache_get(cache_key)
+    if payload is None:
+        q = (
+            Query()
+            .select(*(c + suffix for c in columns))
+            .set_tickers(*symbols)
+            .set_markets(screener)
+            .limit(len(symbols))
+        )
+        # Callers rank on their own metric; a server-side sort is wasted work.
+        q.query.pop('sort', None)
+        payload = _scan_with_retry(q, cache_key=cache_key, raw=True, throttle=True)
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in payload.get('data') or []:
+        if not isinstance(row, dict):
+            continue
+        sym = row.get('s')
+        values = row.get('d')
+        if not sym or not isinstance(values, list) or len(values) != len(columns):
+            continue
+        out[sym] = dict(zip(columns, values))
+    return out
 
 
 def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
