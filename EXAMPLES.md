@@ -2,6 +2,35 @@
 
 This guide shows real-world examples of how to use the TradingView MCP Server with Claude Desktop.
 
+## Market quote with web research (Python MCP client)
+
+Use the optional [market research example](examples/market_research.py) to pair
+`yahoo_price` with free web search and page fetching from
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp).
+Search uses Fast mode, with no account or API key needed. Anonymous access is
+rate limited and intended for light use.
+
+From a source checkout with Python 3.10–3.13 and `uv` installed:
+
+```bash
+uv sync
+uv run python examples/market_research.py AAPL "Apple latest earnings revenue"
+```
+
+The example starts the local TradingView server over stdio, calls `yahoo_price`,
+then connects to `https://search.parallel.ai/mcp` over Streamable HTTP. It discovers
+and calls `web_search`, then calls `web_fetch` for the first search result. All
+Python dependencies are already declared in this project's `pyproject.toml`.
+It prints JSON containing `quote`, `search` (URLs and excerpts), and `source`
+(fetched excerpts, with any warnings or errors from the service).
+
+Replace `AAPL` with a Yahoo Finance symbol and use a short, specific research
+question that names the company or asset. This script collects source evidence;
+it does not run a model or generate an investment recommendation. Review source
+dates and relevance yourself. It exits with an error if a tool fails, search
+returns no sources, or the selected page cannot be fetched. Requests have bounded
+timeouts; if anonymous access is rate limited, wait before trying again.
+
 ## 🚀 Quick Start Examples
 
 ### Basic Market Screening
