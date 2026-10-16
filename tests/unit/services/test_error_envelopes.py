@@ -71,7 +71,7 @@ def test_analyze_coin_upstream_outage_is_retryable(monkeypatch):
 
 
 def test_volume_confirmation_symbol_not_found_envelope(monkeypatch):
-    monkeypatch.setattr(scanner_service, "get_multiple_analysis", lambda **kwargs: {})
+    monkeypatch.setattr(scanner_service, "resilient_scan_columns", lambda *args, **kwargs: {})
 
     out = scanner_service.volume_confirmation_analyze("HYPEUSDT", "BINANCE", "15m")
 
@@ -83,11 +83,12 @@ def test_volume_confirmation_symbol_not_found_envelope(monkeypatch):
 
 
 def test_volume_confirmation_no_indicator_row_not_retryable(monkeypatch):
-    row = _NoIndicators()
+    # The scanner knows the ticker but has no values for any column.
+    row = {column: None for column in scanner_service._CONFIRMATION_COLUMNS}
     monkeypatch.setattr(
         scanner_service,
-        "get_multiple_analysis",
-        lambda **kwargs: {"BINANCE:BTCUSDT": row},
+        "resilient_scan_columns",
+        lambda *args, **kwargs: {"BINANCE:BTCUSDT": row},
     )
 
     out = scanner_service.volume_confirmation_analyze("BTCUSDT", "BINANCE", "15m")
@@ -99,13 +100,13 @@ def test_volume_confirmation_no_indicator_row_not_retryable(monkeypatch):
 
 
 def test_volume_confirmation_upstream_outage_is_retryable(monkeypatch):
-    def boom(**kwargs):
+    def boom(*args, **kwargs):
         raise RuntimeError(
             "Upstream TradingView scanner returned transient errors on all 3 "
             "attempts spanning 4s."
         )
 
-    monkeypatch.setattr(scanner_service, "get_multiple_analysis", boom)
+    monkeypatch.setattr(scanner_service, "resilient_scan_columns", boom)
 
     out = scanner_service.volume_confirmation_analyze("BTCUSDT", "BINANCE", "15m")
 

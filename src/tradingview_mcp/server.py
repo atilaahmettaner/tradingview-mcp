@@ -379,9 +379,9 @@ async def volume_breakout_scanner(
     try:
         exchange = validate_exchange(exchange, "KUCOIN")
         timeframe = validate_timeframe(timeframe, "15m")
-        # volume_breakout_scan iterates many batches against the screener
-        # endpoint (sync urllib). Off-load to a worker thread to keep the
-        # event loop responsive for other concurrent tool calls.
+        # volume_breakout_scan makes a blocking whole-exchange scanner
+        # request. Off-load to a worker thread to keep the event loop
+        # responsive for other concurrent tool calls.
         return await asyncio.to_thread(
             volume_breakout_scan,
             exchange, timeframe, volume_multiplier, price_change_min, limit,

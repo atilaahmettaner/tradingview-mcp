@@ -24,28 +24,34 @@ from tradingview_mcp.core.errors import (
 )
 from tradingview_mcp.core.services.coinlist import load_symbols
 from tradingview_mcp.core.services.screener_service import (
+    _SCAN_CHUNK,
     _batch_budget_s,
     _batch_max_consecutive_fails,
     pick_fallback_exchange,
     symbol_not_found_error,
 )
 from tradingview_mcp.core.services.indicators import compute_metrics
+from tradingview_mcp.core.services.screener_provider import (
+    humanize_upstream_error,
+    resilient_scan_columns,
+)
 from tradingview_mcp.core.utils.validators import (
     EXCHANGE_SCREENER,
     normalize_tradingview_symbol,
     resolve_screener_for_symbol,
 )
 
-try:
-    # Patched: route through resilience layer (retry + 60s TTL cache).
-    import tradingview_ta  # noqa: F401  presence check
-    from tradingview_mcp.core.services.screener_provider import (
-        resilient_get_multiple_analysis as get_multiple_analysis,
-        humanize_upstream_error,
-    )
-    _TA_AVAILABLE = True
-except ImportError:
-    _TA_AVAILABLE = False
+# TradingView has no volume-SMA column. The "volume.SMA20" baseline these tools
+# used was never fetched (tradingview_ta doesn't request it), so it was always
+# missing: the breakout scans skipped every symbol and came back empty, and
+# volume_confirmation always reported a 1.0x ratio. relative_volume_10d_calc,
+# with the timeframe suffix, is TradingView's relative volume: the bar's volume
+# divided by the mean volume of the previous 10 bars at that timeframe.
+_VOLUME_RATIO = "relative_volume_10d_calc"
+_BREAKOUT_COLUMNS = ["open", "close", "volume", _VOLUME_RATIO, "RSI", "BB.upper", "BB.lower"]
+_CONFIRMATION_COLUMNS = [
+    "open", "close", "high", "low", "volume", _VOLUME_RATIO, "RSI", "BB.upper", "BB.lower",
+]
 
 
 # ── Volume breakout ────────────────────────────────────────────────────────────
@@ -63,7 +69,8 @@ def volume_breakout_scan(
     Args:
         exchange:          Exchange identifier.
         timeframe:         TradingView interval string.
-        volume_multiplier: Minimum current-volume / avg-volume ratio.
+        volume_multiplier: Minimum relative volume (the bar's volume over the
+                           mean of the previous 10 bars).
         price_change_min:  Minimum abs(price change %) required.
         limit:             Maximum results to return.
 
@@ -76,7 +83,10 @@ def volume_breakout_scan(
 
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
     volume_breakouts: List[dict] = []
-    batch_size = 100
+    # One scanner request covers every shipped coinlist. The old 100-symbol
+    # batches were capped at the first 500 symbols to bound the request count,
+    # so on big exchanges only the alphabetical head was ever scanned.
+    batch_size = _SCAN_CHUNK
 
     batches_attempted = 0
     batches_failed = 0
@@ -87,11 +97,10 @@ def volume_breakout_scan(
     budget_s = _batch_budget_s()
     started_at = _time.time()
 
-    capped_symbols = min(len(symbols), 500)
-    total_batches = (capped_symbols + batch_size - 1) // batch_size
+    total_batches = (len(symbols) + batch_size - 1) // batch_size
     aborted_reason: Optional[str] = None
 
-    for i in range(0, capped_symbols, batch_size):
+    for i in range(0, len(symbols), batch_size):
         # Bail fast if we've spent the wall-clock budget on retries.
         if (_time.time() - started_at) >= budget_s:
             aborted_reason = f"wall-clock budget ({budget_s:.0f}s) exhausted"
@@ -109,7 +118,7 @@ def volume_breakout_scan(
         batch = symbols[i : i + batch_size]
         batches_attempted += 1
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = resilient_scan_columns(screener, timeframe, batch, _BREAKOUT_COLUMNS)
             consecutive_failures = 0
         except Exception as exc:
             batches_failed += 1
@@ -142,16 +151,12 @@ def volume_breakout_scan(
                 break
             continue
 
-        for symbol, data in analysis.items():
+        for symbol, ind in analysis.items():
             try:
-                if not data or not hasattr(data, "indicators"):
-                    continue
-                ind = data.indicators
-
                 volume = ind.get("volume", 0)
                 close = ind.get("close", 0)
                 open_price = ind.get("open", 0)
-                sma20_volume = ind.get("volume.SMA20", 0)
+                volume_ratio = ind.get(_VOLUME_RATIO)
 
                 if not all([volume, close, open_price]) or volume <= 0:
                     continue
@@ -162,9 +167,8 @@ def volume_breakout_scan(
                 # (volume / (volume/2)) was always exactly 2.0, so every
                 # baseline-less symbol passed the default 2.0x gate and the
                 # scan flooded with fake "breakouts".
-                if not sma20_volume or sma20_volume <= 0:
+                if not volume_ratio or volume_ratio <= 0:
                     continue
-                volume_ratio = volume / sma20_volume
 
                 if abs(price_change) >= price_change_min and volume_ratio >= volume_multiplier:
                     rsi = ind.get("RSI", 50)
@@ -251,7 +255,7 @@ def volume_confirmation_analyze(
     screener = resolve_screener_for_symbol(full_symbol, exchange)
 
     try:
-        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+        analysis = resilient_scan_columns(screener, timeframe, [full_symbol], _CONFIRMATION_COLUMNS)
         if not analysis or full_symbol not in analysis:
             if _allow_venue_fallback:
                 alt = pick_fallback_exchange(symbol, exchange)
@@ -269,8 +273,8 @@ def volume_confirmation_analyze(
                 symbol, exchange, timeframe=timeframe, full_symbol=full_symbol
             )
 
-        data = analysis[full_symbol]
-        if not data or not hasattr(data, "indicators"):
+        ind = analysis[full_symbol]
+        if all(value is None for value in ind.values()):
             if _allow_venue_fallback:
                 alt = pick_fallback_exchange(symbol, exchange)
                 if alt:
@@ -293,7 +297,6 @@ def volume_confirmation_analyze(
                 full_symbol=full_symbol,
             )
 
-        ind = data.indicators
         volume = ind.get("volume", 0)
         close = ind.get("close", 0)
         open_price = ind.get("open", 0)
@@ -303,8 +306,10 @@ def volume_confirmation_analyze(
         price_change = ((close - open_price) / open_price) * 100 if open_price > 0 else 0
         candle_range = ((high - low) / low) * 100 if low > 0 else 0
 
-        sma20_volume = ind.get("volume.SMA20", 0)
-        volume_ratio = volume / sma20_volume if sma20_volume > 0 else 1
+        relative_volume = ind.get(_VOLUME_RATIO) or 0
+        volume_ratio = relative_volume if relative_volume > 0 else 1
+        # The baseline the ratio was taken against: mean of the previous 10 bars.
+        avg_volume = volume / relative_volume if relative_volume > 0 and volume else 0
 
         rsi = ind.get("RSI", 50)
         bb_upper = ind.get("BB.upper", 0)
@@ -348,7 +353,7 @@ def volume_confirmation_analyze(
                 "current_volume": volume,
                 "volume_ratio": round(volume_ratio, 2),
                 "volume_strength": volume_strength,
-                "average_volume": sma20_volume,
+                "average_volume": avg_volume,
             },
             "technical_indicators": {
                 "RSI": round(rsi, 1),

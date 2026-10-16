@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Volume tools never saw a volume baseline** (`volume_breakout_scanner`,
+  `smart_volume_scanner`, `volume_confirmation_analysis`): the volume ratio
+  was computed from a `volume.SMA20` column that was never fetched.
+  tradingview_ta doesn't request it, and TradingView's scanner has no
+  volume-SMA field. Since the baseline fallback was removed, the breakout
+  scans skipped every symbol and always returned an empty list, and
+  `volume_confirmation_analysis` always reported a 1.0x ratio. The ratio is
+  now TradingView's relative volume (`relative_volume_10d_calc`): the bar's
+  volume over the mean of the previous 10 bars at that timeframe. The scans
+  also move to a single scanner request for the whole exchange. They used to
+  run 100-symbol batches capped at the first 500 symbols, so on big
+  exchanges only the alphabetical head was scanned.
 - **US-stock scans failed or timed out** (`top_gainers`, `top_losers`,
   `rating_filter`, `bollinger_scan`): the scans called `get_multiple_analysis`
   in 200-symbol batches, each asking for ~90 indicator columns, so NASDAQ

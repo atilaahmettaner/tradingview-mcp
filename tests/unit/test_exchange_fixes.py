@@ -159,21 +159,21 @@ class TestVolumeConfirmationSymbolPrefix:
         import tradingview_mcp.core.services.scanner_service as svc
         seen = {}
 
-        def fake_gma(screener, interval, symbols):
+        def fake_scan(screener, interval, symbols, columns):
             # setdefault: keep the FIRST call. The auto-venue fallback retries
-            # an empty result on another listing venue (a second gma call with
+            # an empty result on another listing venue (a second scan with
             # that venue's prefix); this test pins the symbol sent for the
             # REQUESTED venue, which the fallback retry must not overwrite.
             seen.setdefault("symbols", symbols)
             seen.setdefault("screener", screener)
             return {}  # empty -> function returns a "No data" envelope after the call
 
-        orig = svc.get_multiple_analysis
-        svc.get_multiple_analysis = fake_gma
+        orig = svc.resilient_scan_columns
+        svc.resilient_scan_columns = fake_scan
         try:
             svc.volume_confirmation_analyze(symbol, exchange, "15m")
         finally:
-            svc.get_multiple_analysis = orig
+            svc.resilient_scan_columns = orig
         return seen
 
     def test_crypto_symbol_is_venue_prefixed(self):

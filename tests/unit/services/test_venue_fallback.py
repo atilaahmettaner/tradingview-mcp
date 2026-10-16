@@ -8,7 +8,8 @@ the analysis on a listing venue and say so in the response
 (requested_exchange / resolved_exchange / resolution_note) instead of
 failing a deterministic request forever.
 
-Network-free: get_multiple_analysis is monkeypatched in both services.
+Network-free: the upstream fetch (get_multiple_analysis in screener_service,
+resilient_scan_columns in scanner_service) is monkeypatched.
 """
 from collections import defaultdict
 from types import SimpleNamespace
@@ -80,13 +81,14 @@ def test_analyze_coin_still_errors_when_fallback_venue_is_empty_too(monkeypatch)
 # ── volume_confirmation fallback (incl. the NO_DATA row-without-indicators) ──
 
 def test_volume_confirmation_resolves_on_listing_venue(monkeypatch):
-    def fake_gma(screener, interval, symbols):
+    def fake_scan(screener, interval, symbols, columns):
         if symbols[0].startswith("BINANCE:"):
-            # the live NO_DATA shape: venue returns a row without indicators
-            return {symbols[0]: SimpleNamespace()}
-        return {symbols[0]: _fake_data()}
+            # the live NO_DATA shape: the venue knows the row but has no values
+            return {symbols[0]: {c: None for c in columns}}
+        ind = _fake_data().indicators
+        return {symbols[0]: {c: ind[c] for c in columns}}
 
-    monkeypatch.setattr(scanner_service, "get_multiple_analysis", fake_gma)
+    monkeypatch.setattr(scanner_service, "resilient_scan_columns", fake_scan)
     out = scanner_service.volume_confirmation_analyze("HYPEUSDT", "binance", "15m")
     assert not is_error(out), out
     assert out["resolved_exchange"] == "KUCOIN"
