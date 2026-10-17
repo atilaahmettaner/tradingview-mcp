@@ -814,12 +814,19 @@ def backtest_strategy(
         interval: '1d' (daily) or '1h' (hourly)
         include_trade_log: Include full per-trade log (default False)
         include_equity_curve: Include equity curve data points (default False)
+
+    Returns ``dict`` on success. On ANY failure returns a structured error
+    envelope ``{"error": {"code": ..., "retryable": ...}}`` — never a raw
+    exception string.
     """
-    return run_backtest(
-        symbol, strategy, period, initial_capital,
-        commission_pct, slippage_pct, interval,
-        include_trade_log, include_equity_curve,
-    )
+    try:
+        return run_backtest(
+            symbol, strategy, period, initial_capital,
+            commission_pct, slippage_pct, interval,
+            include_trade_log, include_equity_curve,
+        )
+    except Exception as e:
+        return exception_to_envelope(e, context="backtest_strategy")
 
 
 @mcp.tool(annotations=ToolAnnotations(title="Strategy Comparison Race", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
@@ -838,8 +845,15 @@ def compare_strategies(
                  complete SMA200 warmup; otherwise they contribute zero trades)
         initial_capital: Starting capital in USD (default $10,000)
         interval: '1d' (daily) or '1h' (hourly)
+
+    Returns ``dict`` on success. On ANY failure returns a structured error
+    envelope ``{"error": {"code": ..., "retryable": ...}}`` — never a raw
+    exception string.
     """
-    return _compare_strategies(symbol, period, initial_capital, interval=interval)
+    try:
+        return _compare_strategies(symbol, period, initial_capital, interval=interval)
+    except Exception as e:
+        return exception_to_envelope(e, context="compare_strategies")
 
 
 @mcp.tool(annotations=ToolAnnotations(title="Walk-Forward Backtest", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
@@ -869,11 +883,18 @@ def walk_forward_backtest_strategy(
         n_splits: Number of walk-forward folds (default 3, max 10)
         train_ratio: Fraction of each fold used for training (default 0.7)
         interval: '1d' (daily) or '1h' (hourly)
+
+    Returns ``dict`` on success. On ANY failure returns a structured error
+    envelope ``{"error": {"code": ..., "retryable": ...}}`` — never a raw
+    exception string.
     """
-    return walk_forward_backtest(
-        symbol, strategy, period, initial_capital,
-        commission_pct, slippage_pct, n_splits, train_ratio, interval,
-    )
+    try:
+        return walk_forward_backtest(
+            symbol, strategy, period, initial_capital,
+            commission_pct, slippage_pct, n_splits, train_ratio, interval,
+        )
+    except Exception as e:
+        return exception_to_envelope(e, context="walk_forward_backtest_strategy")
 
 
 # ── Yahoo Finance tools ────────────────────────────────────────────────────────

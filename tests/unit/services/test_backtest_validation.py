@@ -2,16 +2,22 @@
 
 These cover the capital/cost guards added to the public backtest API. They are
 network-free on purpose: each guard runs *before* `_fetch_ohlcv`, so passing a
-valid strategy/period/interval with an out-of-range numeric input returns a
-structured error without ever hitting Yahoo Finance.
+valid strategy/period/interval with an out-of-range numeric input raises a
+typed error without ever hitting Yahoo Finance.
 """
+import pytest
+
+from tradingview_mcp.core.errors import (
+    BacktestServiceError,
+    ErrorCode,
+    is_error,
+)
 from tradingview_mcp.core.services.backtest_service import (
     _validate_numeric_inputs,
+    compare_strategies,
     run_backtest,
     walk_forward_backtest,
-    compare_strategies,
 )
-
 
 # ─── helper: _validate_numeric_inputs ─────────────────────────────────────────
 
@@ -54,18 +60,31 @@ def test_cost_boundaries_inclusive():
 # ─── boundary: public API returns error before any network call ───────────────
 
 def test_run_backtest_rejects_bad_capital_offline():
-    out = run_backtest("BTC-USD", "rsi", period="1y", interval="1d",
-                       initial_capital=0.0)
-    assert "error" in out and "initial_capital" in out["error"]
+    with pytest.raises(BacktestServiceError) as exc_info:
+        run_backtest("BTC-USD", "rsi", period="1y", interval="1d",
+                     initial_capital=0.0)
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMETER
+    env = exc_info.value.to_envelope()
+    assert is_error(env)
+    assert "initial_capital" in env["error"]["message"]
+    assert env["error"]["retryable"] is False
 
 
 def test_walk_forward_rejects_negative_commission_offline():
-    out = walk_forward_backtest("BTC-USD", "rsi", period="2y", interval="1d",
-                                commission_pct=-0.1)
-    assert "error" in out and "commission_pct" in out["error"]
+    with pytest.raises(BacktestServiceError) as exc_info:
+        walk_forward_backtest("BTC-USD", "rsi", period="2y", interval="1d",
+                              commission_pct=-0.1)
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMETER
+    env = exc_info.value.to_envelope()
+    assert is_error(env)
+    assert "commission_pct" in env["error"]["message"]
 
 
 def test_compare_strategies_rejects_bad_capital_offline():
-    out = compare_strategies("BTC-USD", period="1y", interval="1d",
-                             initial_capital=-5.0)
-    assert "error" in out and "initial_capital" in out["error"]
+    with pytest.raises(BacktestServiceError) as exc_info:
+        compare_strategies("BTC-USD", period="1y", interval="1d",
+                           initial_capital=-5.0)
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMETER
+    env = exc_info.value.to_envelope()
+    assert is_error(env)
+    assert "initial_capital" in env["error"]["message"]
