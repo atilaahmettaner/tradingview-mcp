@@ -113,6 +113,30 @@ class ScreenerServiceError(RuntimeError):
         return make_error(self.code, str(self), **self.extra)
 
 
+class BacktestServiceError(RuntimeError):
+    """Typed service-layer failure carrying an :class:`ErrorCode`.
+
+    Subclasses ``RuntimeError`` deliberately: the pre-envelope backtest
+    guards returned ``{"error": msg}`` dicts, and any external caller that
+    treated those as fatal (or caught ``RuntimeError`` from deeper helpers)
+    keeps working unchanged while the MCP boundary gains a lossless
+    translation to the structured envelope.
+
+    Attributes:
+        code:  Stable :class:`ErrorCode` for programmatic branching.
+        extra: Structured context merged into the envelope
+               (e.g. ``symbol="AAPL"``, ``retryable=True``).
+    """
+
+    def __init__(self, code: Union[ErrorCode, str], message: str, **extra: Any) -> None:
+        super().__init__(message)
+        self.code = code
+        self.extra = extra
+
+    def to_envelope(self) -> dict[str, Any]:
+        return make_error(self.code, str(self), **self.extra)
+
+
 class BatchExecutionError(Exception):
     """Raised by batched scanners when every batch failed.
 
@@ -187,6 +211,8 @@ def exception_to_envelope(exc: BaseException, *, context: str = "") -> dict[str,
                  envelope stays diagnosable without a traceback.
     """
     if isinstance(exc, ScreenerServiceError):
+        return exc.to_envelope()
+    if isinstance(exc, BacktestServiceError):
         return exc.to_envelope()
     if isinstance(exc, PartialDataError):
         env = make_error(

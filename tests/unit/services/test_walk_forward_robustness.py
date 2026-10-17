@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
+from tradingview_mcp.core.errors import BacktestServiceError, ErrorCode, is_error
 from tradingview_mcp.core.services import backtest_service
 
 
@@ -88,12 +91,16 @@ class TestWarmupInsufficientData:
                 return [_trade(100.0, 102.0)]
             return []
 
-        result = _run(no_trades, strategy="ema_cross")
-        # 30-bar test slices < 50-bar warmup for every fold → explicit error,
-        # never a fold_rob=0.0 "fails out-of-sample" verdict.
-        assert "error" in result
-        assert "warmup" in result["error"]
-        assert all(f["insufficient_data"] for f in result["folds"])
+        with pytest.raises(BacktestServiceError) as exc_info:
+            _run(no_trades, strategy="ema_cross")
+        # 30-bar test slices < 50-bar warmup for every fold → explicit
+        # PARTIAL_DATA error (never a fold_rob=0.0 "fails out-of-sample"
+        # verdict), with the folds carried inside the envelope.
+        assert exc_info.value.code == ErrorCode.PARTIAL_DATA
+        env = exc_info.value.to_envelope()
+        assert is_error(env)
+        assert "warmup" in env["error"]["message"]
+        assert all(f["insufficient_data"] for f in env["error"]["folds"])
 
     def test_adequate_windows_are_scored_normally(self):
         """rsi warmup is 14; 30-bar test slices are adequate → scored."""
