@@ -294,9 +294,9 @@ Tools that have adopted the structured error format return either their normal p
 
 **Why:** the previous `[]` / `{"error": "Analysis failed: ..."}` strings made it impossible to distinguish "no matches today" from "upstream rate-limit cliff." The new envelope is programmatically branchable by `code`, and `retryable` tells the caller whether waiting and retrying can help (upstream storms pass; a missing dependency won't fix itself).
 
-**Full coverage** (every failure mode — upstream outage, empty symbol list, missing dependency, unexpected exception — returns an envelope, never a raw string/traceback): `top_gainers`, `top_losers`, `bollinger_scan`, `rating_filter`, `volume_breakout_scanner`, `smart_volume_scanner`.
+**Full coverage** (every failure mode — upstream outage, empty symbol list, missing dependency, unexpected exception — returns an envelope, never a raw string/traceback): `top_gainers`, `top_losers`, `bollinger_scan`, `rating_filter`, `volume_breakout_scanner`, `smart_volume_scanner`, `backtest_strategy`, `compare_strategies`, `walk_forward_backtest_strategy`.
 
-**Partial adoption** (main error paths return envelopes): `coin_analysis`, `volume_confirmation_analysis`, `consecutive_candles_scan`, `futures_market_overview`, `futures_top_movers`, `stock_prices`, and the backtest input guards. Remaining tools migrate in batches — tracked in [#76](https://github.com/atilaahmettaner/tradingview-mcp/issues/76).
+**Partial adoption** (main error paths return envelopes): `coin_analysis`, `volume_confirmation_analysis`, `consecutive_candles_scan`, `futures_market_overview`, `futures_top_movers`, `stock_prices`. Remaining tools migrate in batches — tracked in [#76](https://github.com/atilaahmettaner/tradingview-mcp/issues/76).
 
 **Detecting an error:**
 

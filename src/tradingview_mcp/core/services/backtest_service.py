@@ -21,6 +21,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
+from tradingview_mcp.core.errors import BacktestServiceError, ErrorCode
 from tradingview_mcp.core.services.indicators_calc import (
     calc_rsi, calc_bollinger, calc_macd, calc_ema, calc_sma, calc_atr,
     calc_supertrend, calc_donchian,
@@ -578,8 +579,9 @@ def _validate_numeric_inputs(
     """Return an error message if a capital/cost input is out of range, else None.
 
     Follows the same structured-error convention as the strategy/period checks:
-    callers return ``{"error": msg}`` rather than raising. Without this, two
-    silent-corruption paths are reachable from the public tools:
+    callers raise ``BacktestServiceError`` with the message rather than
+    returning it. Without this, two silent-corruption paths are reachable
+    from the public tools:
 
       * ``initial_capital <= 0`` → division by initial_capital in the trade log,
         equity curve, and metrics (0 raises ZeroDivisionError; negative flips the
@@ -616,29 +618,57 @@ def run_backtest(
     interval = interval.lower().strip()
 
     if strategy not in _STRATEGY_MAP:
-        return {"error": f"Unknown strategy '{strategy}'. Choose: {', '.join(_STRATEGY_MAP)}"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Unknown strategy '{strategy}'. Choose: {', '.join(_STRATEGY_MAP)}",
+            strategy=strategy, retryable=False,
+        )
     if period not in _VALID_PERIODS:
-        return {"error": f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}",
+            period=period, retryable=False,
+        )
     if interval not in _VALID_INTERVALS:
-        return {"error": f"Invalid interval '{interval}'. Choose: 1d or 1h"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid interval '{interval}'. Choose: 1d or 1h",
+            interval=interval, retryable=False,
+        )
 
     num_err = _validate_numeric_inputs(initial_capital, commission_pct, slippage_pct)
     if num_err:
-        return {"error": num_err}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER, num_err, retryable=False,
+        )
 
     try:
         candles = _fetch_ohlcv(symbol, period, interval)
     except Exception as e:
-        return {"error": f"Failed to fetch data for '{symbol}': {e}"}
+        # Single-shot fetch (no batching here): a failure is an upstream
+        # problem, and Yahoo storms pass — mark it retryable.
+        raise BacktestServiceError(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Failed to fetch data for '{symbol}': {e}",
+            symbol=symbol, retryable=True,
+        ) from e
 
     min_bars = 30 if interval == "1d" else 100
     if len(candles) < min_bars:
-        return {"error": f"Not enough data ({len(candles)} bars). Try a longer period."}
+        raise BacktestServiceError(
+            ErrorCode.NO_DATA,
+            f"Not enough data ({len(candles)} bars). Try a longer period.",
+            symbol=symbol, retryable=False,
+        )
 
     if strategy in _SMA200_STRATEGIES and len(candles) < _SMA200_MIN_BARS:
-        return {"error": (f"Strategy '{strategy}' needs ≥{_SMA200_MIN_BARS} bars "
-                          f"(SMA200 warmup); got {len(candles)}. "
-                          f"Use period='1y' or '2y'.")}
+        raise BacktestServiceError(
+            ErrorCode.NO_DATA,
+            (f"Strategy '{strategy}' needs ≥{_SMA200_MIN_BARS} bars "
+             f"(SMA200 warmup); got {len(candles)}. "
+             f"Use period='1y' or '2y'."),
+            strategy=strategy, symbol=symbol, retryable=False,
+        )
 
     raw_trades = _STRATEGY_MAP[strategy](candles)
     trades     = _apply_costs(raw_trades, commission_pct, slippage_pct)
@@ -693,22 +723,42 @@ def compare_strategies(
     period   = period.lower().strip()
     interval = interval.lower().strip()
     if period not in _VALID_PERIODS:
-        return {"error": f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}",
+            period=period, retryable=False,
+        )
     if interval not in _VALID_INTERVALS:
-        return {"error": f"Invalid interval '{interval}'. Choose: 1d or 1h"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid interval '{interval}'. Choose: 1d or 1h",
+            interval=interval, retryable=False,
+        )
 
     num_err = _validate_numeric_inputs(initial_capital, commission_pct, slippage_pct)
     if num_err:
-        return {"error": num_err}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER, num_err, retryable=False,
+        )
 
     try:
         candles = _fetch_ohlcv(symbol, period, interval)
     except Exception as e:
-        return {"error": f"Failed to fetch data for '{symbol}': {e}"}
+        # Single-shot fetch (no batching here): a failure is an upstream
+        # problem, and Yahoo storms pass — mark it retryable.
+        raise BacktestServiceError(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Failed to fetch data for '{symbol}': {e}",
+            symbol=symbol, retryable=True,
+        ) from e
 
     min_bars = 30 if interval == "1d" else 100
     if len(candles) < min_bars:
-        return {"error": f"Not enough data ({len(candles)} bars)."}
+        raise BacktestServiceError(
+            ErrorCode.NO_DATA,
+            f"Not enough data ({len(candles)} bars).",
+            symbol=symbol, retryable=False,
+        )
 
     sma200_ok = len(candles) >= _SMA200_MIN_BARS
 
@@ -801,33 +851,69 @@ def walk_forward_backtest(
     interval = interval.lower().strip()
 
     if strategy not in _STRATEGY_MAP:
-        return {"error": f"Unknown strategy '{strategy}'. Choose: {', '.join(_STRATEGY_MAP)}"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Unknown strategy '{strategy}'. Choose: {', '.join(_STRATEGY_MAP)}",
+            strategy=strategy, retryable=False,
+        )
     if period not in _VALID_PERIODS:
-        return {"error": f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid period '{period}'. Choose: {', '.join(_VALID_PERIODS)}",
+            period=period, retryable=False,
+        )
     if interval not in _VALID_INTERVALS:
-        return {"error": f"Invalid interval '{interval}'. Choose: 1d or 1h"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            f"Invalid interval '{interval}'. Choose: 1d or 1h",
+            interval=interval, retryable=False,
+        )
     if not (2 <= n_splits <= 10):
-        return {"error": "n_splits must be between 2 and 10"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            "n_splits must be between 2 and 10",
+            n_splits=n_splits, retryable=False,
+        )
     if not (0.5 <= train_ratio <= 0.9):
-        return {"error": "train_ratio must be between 0.5 and 0.9"}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            "train_ratio must be between 0.5 and 0.9",
+            train_ratio=train_ratio, retryable=False,
+        )
     if strategy in _SMA200_STRATEGIES:
-        return {"error": (f"Strategy '{strategy}' requires SMA200 warmup "
-                          f"(~{_SMA200_MIN_BARS} bars) which exceeds typical "
-                          f"walk-forward fold sizes. Use run_backtest with "
-                          f"period='2y' instead, or pick a shorter-warmup strategy.")}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER,
+            (f"Strategy '{strategy}' requires SMA200 warmup "
+             f"(~{_SMA200_MIN_BARS} bars) which exceeds typical "
+             f"walk-forward fold sizes. Use run_backtest with "
+             f"period='2y' instead, or pick a shorter-warmup strategy."),
+            strategy=strategy, retryable=False,
+        )
 
     num_err = _validate_numeric_inputs(initial_capital, commission_pct, slippage_pct)
     if num_err:
-        return {"error": num_err}
+        raise BacktestServiceError(
+            ErrorCode.INVALID_PARAMETER, num_err, retryable=False,
+        )
 
     try:
         candles = _fetch_ohlcv(symbol, period, interval)
     except Exception as e:
-        return {"error": f"Failed to fetch data for '{symbol}': {e}"}
+        # Single-shot fetch (no batching here): a failure is an upstream
+        # problem, and Yahoo storms pass — mark it retryable.
+        raise BacktestServiceError(
+            ErrorCode.UPSTREAM_ERROR,
+            f"Failed to fetch data for '{symbol}': {e}",
+            symbol=symbol, retryable=True,
+        ) from e
 
     min_bars = max(60, n_splits * 20)
     if len(candles) < min_bars:
-        return {"error": f"Not enough data ({len(candles)} bars) for {n_splits} splits. Try longer period."}
+        raise BacktestServiceError(
+            ErrorCode.NO_DATA,
+            f"Not enough data ({len(candles)} bars) for {n_splits} splits. Try longer period.",
+            symbol=symbol, n_splits=n_splits, retryable=False,
+        )
 
     fn          = _STRATEGY_MAP[strategy]
     fold_size   = len(candles) // n_splits
@@ -899,13 +985,24 @@ def walk_forward_backtest(
         })
 
     if not folds:
-        return {"error": "Could not generate any valid folds. Try a longer period or fewer splits."}
+        raise BacktestServiceError(
+            ErrorCode.NO_DATA,
+            "Could not generate any valid folds. Try a longer period or fewer splits.",
+            symbol=symbol, n_splits=n_splits, retryable=False,
+        )
 
     scored_folds = [f for f in folds if not f["insufficient_data"]]
     if not scored_folds:
-        return {"error": (f"Every test window is shorter than the ~{warmup_bars}-bar "
-                          f"warmup '{strategy}' needs to trade at all. Use a longer "
-                          f"period or fewer splits."), "folds": folds}
+        # Partial results: every test window was too short for the strategy's
+        # warmup, so nothing could be scored — but the folds themselves are
+        # still useful. They ride alongside the envelope via `extra`.
+        raise BacktestServiceError(
+            ErrorCode.PARTIAL_DATA,
+            (f"Every test window is shorter than the ~{warmup_bars}-bar "
+             f"warmup '{strategy}' needs to trade at all. Use a longer "
+             f"period or fewer splits."),
+            strategy=strategy, folds=folds, retryable=False,
+        )
 
     avg_train  = round(statistics.mean(f["train_return_pct"] for f in scored_folds), 2)
     avg_test   = round(statistics.mean(f["test_return_pct"]  for f in scored_folds), 2)
