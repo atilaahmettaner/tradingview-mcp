@@ -765,6 +765,22 @@ def compare_strategies(
 
 # ─── Public API: walk_forward_backtest ────────────────────────────────────────
 
+def _warm_slice_trades(fn, candles: list[dict], lo: int, hi: int, warmup_bars: int,
+                       commission_pct: float, slippage_pct: float) -> list[dict]:
+    """Trades opened inside ``candles[lo:hi]``, with the indicators warm.
+
+    The strategy runs from ``warmup_bars`` before the slice, on history the
+    slice would already have had, and only trades opened inside the slice
+    count. Started cold on the slice alone, a 50-bar EMA strategy never traded
+    in the ~50-bar test windows of the default 2y / 3-split run, and every
+    slice lost its first warmup bars, which read as out-of-sample decay.
+    """
+    run = candles[max(0, lo - warmup_bars):hi]
+    first = candles[lo]["date"]
+    trades = [t for t in fn(run) if t["entry_date"] >= first]
+    return _apply_costs(trades, commission_pct, slippage_pct)
+
+
 def walk_forward_backtest(
     symbol: str,
     strategy: str,
@@ -792,9 +808,11 @@ def walk_forward_backtest(
       >= 0.2  → WEAK      (likely overfitted)
       < 0.2   → OVERFITTED (do not trade live)
 
-    Folds whose test slice is shorter than the strategy's indicator warmup
-    are flagged ``insufficient_data`` and excluded from the average — a
-    window too small to trade is not evidence of out-of-sample failure.
+    Each slice runs with its indicators already warm (see
+    ``_warm_slice_trades``). A test slice with less earlier history than the
+    strategy's warmup is flagged ``insufficient_data`` and excluded from the
+    average: a window that can't trade is not evidence of out-of-sample
+    failure.
     """
     strategy = strategy.lower().strip()
     period   = period.lower().strip()
@@ -849,13 +867,16 @@ def walk_forward_backtest(
         if len(train_c) < 20 or len(test_c) < 5:
             continue
 
-        # A test slice too short for the strategy's slowest indicator can
-        # never trade — recording fold_rob=0.0 would falsely count it as
-        # out-of-sample failure. Mark it and exclude it from the average.
-        insufficient = len(test_c) < warmup_bars + 5
+        test_start = start + split
+        train_t = _warm_slice_trades(fn, candles, start, test_start, warmup_bars,
+                                     commission_pct, slippage_pct)
+        test_t  = _warm_slice_trades(fn, candles, test_start, end, warmup_bars,
+                                     commission_pct, slippage_pct)
 
-        train_t = _apply_costs(fn(train_c), commission_pct, slippage_pct)
-        test_t  = _apply_costs(fn(test_c),  commission_pct, slippage_pct)
+        # A test slice without enough earlier history to warm the slowest
+        # indicator can't be judged: recording fold_rob=0.0 would falsely
+        # count it as out-of-sample failure. Mark it and leave it out.
+        insufficient = test_start < warmup_bars
         train_m = _calc_metrics(train_t, initial_capital, interval, candles=train_c,
                                 risk_free_rate=risk_free_rate, periods_per_year=periods_per_year)
         test_m  = _calc_metrics(test_t,  initial_capital, interval, candles=test_c,
@@ -903,9 +924,10 @@ def walk_forward_backtest(
 
     scored_folds = [f for f in folds if not f["insufficient_data"]]
     if not scored_folds:
-        return {"error": (f"Every test window is shorter than the ~{warmup_bars}-bar "
-                          f"warmup '{strategy}' needs to trade at all. Use a longer "
-                          f"period or fewer splits."), "folds": folds}
+        return {"error": (f"Every test window starts with less than the ~{warmup_bars} "
+                          f"bars of history '{strategy}' needs to warm up. Use "
+                          f"period='2y' (the longest) or fewer splits (n_splits=2)."),
+                "folds": folds}
 
     avg_train  = round(statistics.mean(f["train_return_pct"] for f in scored_folds), 2)
     avg_test   = round(statistics.mean(f["test_return_pct"]  for f in scored_folds), 2)

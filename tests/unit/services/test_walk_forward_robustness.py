@@ -1,15 +1,21 @@
 """Regression tests for walk-forward robustness scoring.
 
-Two shipped defects:
+Three shipped defects:
 
 1. In the both-negative branch, ``fold_rob = min(te/tr, 2.0)`` REWARDED losing
    more out-of-sample: train -1% / test -2% scored a capped 2.0 ("maximally
    robust"). The fix scores ``tr/te`` so losing LESS out-of-sample is what
    scores above 1.
 
-2. Test slices shorter than the strategy's indicator warmup can never trade,
-   so ``te=0`` forced ``fold_rob=0.0`` and a false "OVERFITTED" verdict. Such
-   folds are now flagged ``insufficient_data`` and excluded from the average.
+2. Test slices that can't trade used to force ``fold_rob=0.0`` and a false
+   "OVERFITTED" verdict. Such folds are flagged ``insufficient_data`` and
+   excluded from the average.
+
+3. Every slice was simulated cold, on its own bars only. ema_cross (50-bar
+   warmup) never traded in the ~50-bar test windows of the default 2y /
+   3-split run, so the tool failed with its own defaults, and every slice lost
+   its first warmup bars. Slices now run with the history just before them,
+   and only trades opened inside the slice count.
 """
 from __future__ import annotations
 
@@ -26,21 +32,34 @@ def _candles(n: int = 200) -> list[dict]:
     ]
 
 
-def _trade(entry: float, exit_: float) -> dict:
-    return {"entry_date": "2024-01-01", "exit_date": "2024-01-02",
-            "entry_price": entry, "exit_price": exit_}
+CANDLES = _candles()
+# n=200, n_splits=2 → fold=100, train=70, test=30: test slices end on the
+# fold boundaries, train slices at bars 69 and 169.
+TEST_ENDS = {CANDLES[99]["date"], CANDLES[199]["date"]}
+
+
+def _trade_near_end(candles: list[dict], exit_price: float) -> dict:
+    """A trade opened 3 bars before the end of what the strategy was given."""
+    return {"entry_date": candles[-3]["date"], "exit_date": candles[-1]["date"],
+            "entry_price": 100.0, "exit_price": exit_price}
 
 
 def _fake_strategy(train_exit: float, test_exit: float):
-    """Return one trade whose P&L depends on window size.
+    """One trade whose P&L depends on which slice the run belongs to.
 
-    Walk-forward slices each fold into train (70%) and test (30%), so the
-    train window is always the longer one. n=200, n_splits=2 → fold=100,
-    train=70, test=30.
+    Slices run with warmup history in front of them, so the length of what
+    the strategy receives doesn't tell train from test; where it ends does.
     """
     def fn(candles, **_):
-        exit_ = train_exit if len(candles) > 50 else test_exit
-        return [_trade(100.0, exit_)]
+        exit_ = test_exit if candles[-1]["date"] in TEST_ENDS else train_exit
+        return [_trade_near_end(candles, exit_)]
+    return fn
+
+
+def _needs_bars(bars: int, exit_price: float = 102.0):
+    """A strategy that emits nothing until its slow indicator has `bars` bars."""
+    def fn(candles, **_):
+        return [_trade_near_end(candles, exit_price)] if len(candles) >= bars else []
     return fn
 
 
@@ -77,26 +96,40 @@ class TestPositiveBranchUnchanged:
         assert all(s == 0.5 for s in scores)
 
 
-class TestWarmupInsufficientData:
-    def test_short_test_windows_do_not_read_as_overfitted(self):
-        """ema_cross needs ~50 warmup bars; a 30-bar test slice can't trade.
-        That must surface as insufficient data, not OVERFITTED."""
-        def no_trades(candles, **_):
-            # Realistic: too few bars for the slow EMA → zero signals in
-            # test; the train window (70 bars) manages one winning trade.
-            if len(candles) > 50:
-                return [_trade(100.0, 102.0)]
-            return []
+class TestWarmup:
+    def test_short_test_windows_trade_once_warm(self):
+        """ema_cross needs ~50 bars and the test slices here are 30. Run cold
+        they never traded and the tool returned an error; warmed on the
+        history before them they trade and are scored."""
+        result = _run(_needs_bars(55), strategy="ema_cross")
+        assert "error" not in result
+        assert result["insufficient_data_folds"] == 0
+        assert all(f["test_trades"] == 1 for f in result["folds"])
 
-        result = _run(no_trades, strategy="ema_cross")
-        # 30-bar test slices < 50-bar warmup for every fold → explicit error,
-        # never a fold_rob=0.0 "fails out-of-sample" verdict.
+    def test_trades_opened_in_the_warmup_history_do_not_count(self):
+        """The history in front of a slice only warms the indicators: a trade
+        opened there belongs to the slice before."""
+        def opens_at_first_bar(candles, **_):
+            return [{"entry_date": candles[0]["date"], "exit_date": candles[-1]["date"],
+                     "entry_price": 100.0, "exit_price": 110.0}]
+
+        result = _run(opens_at_first_bar, strategy="ema_cross")
+        assert all(f["test_trades"] == 0 for f in result["folds"])
+        # The first train slice starts at bar 0, so there is no history in
+        # front of it and its trade is its own.
+        assert result["folds"][0]["train_trades"] == 1
+
+    def test_not_enough_history_is_insufficient_data(self):
+        """When no test slice has warmup-length history before it, the tool
+        says so and names options that exist (2y is the longest period)."""
+        with patch.dict(backtest_service._STRATEGY_WARMUP_BARS, {"ema_cross": 500}):
+            result = _run(_needs_bars(55), strategy="ema_cross")
         assert "error" in result
-        assert "warmup" in result["error"]
+        assert "warm up" in result["error"] and "period='2y'" in result["error"]
         assert all(f["insufficient_data"] for f in result["folds"])
 
     def test_adequate_windows_are_scored_normally(self):
-        """rsi warmup is 14; 30-bar test slices are adequate → scored."""
+        """rsi warmup is 14; every test slice has the history it needs."""
         result = _run(_fake_strategy(train_exit=102.0, test_exit=102.0))
         assert "error" not in result
         assert result["insufficient_data_folds"] == 0
