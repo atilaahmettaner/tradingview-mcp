@@ -573,6 +573,79 @@ def resilient_scan_columns(
     return out
 
 
+def resilient_multi_timeframe_analysis(
+    screener: str,
+    symbol: str,
+    timeframes: List[str],
+) -> Dict[str, Any]:
+    """tradingview_ta ``Analysis`` for ONE symbol on several timeframes, from
+    ONE scanner request.
+
+    multi_timeframe_analysis used to call ``get_multiple_analysis`` once per
+    timeframe and then fetch ATR once per timeframe: ten requests within a few
+    seconds for a single tool call. That is what trips TradingView's
+    empty-body throttling, and on the hosted server about a third of real calls
+    ended with every timeframe failing after ~25s of retries. The scanner
+    accepts the per-interval columns of all timeframes in one request (about
+    470 columns, ~0.2s), ATR included, so this asks once and builds each
+    timeframe's ``Analysis`` locally with tradingview_ta's own ``calculate``.
+
+    Shares the resilience layer: 60s fresh cache, retry with backoff, failure
+    cooldown, the 6h stale-while-error fallback and the TA throttle slot.
+
+    Args:
+        screener:   Scanner market (``"crypto"``, ``"america"``, …).
+        symbol:     Fully-qualified ticker (``"KUCOIN:BTCUSDT"``).
+        timeframes: Our timeframe strings (``1W``, ``1D``, ``4h``, ``1h``, ``15m``…).
+
+    Returns:
+        ``{timeframe: Analysis or None}``: None where the scanner has no data
+        for that timeframe (or for the symbol at all). Raises the resilience
+        layer's terminal error when the request itself keeps failing.
+    """
+    from tradingview_screener import Query
+    from tradingview_ta.main import TradingView, calculate  # type: ignore
+
+    # tradingview_ta's columns in its own order (calculate() reads them by
+    # position), then ours appended at the end as its docs allow. ATR rides in
+    # the same request instead of a follow-up request per timeframe.
+    keys = TradingView.indicators.copy() + list(TA_EXTRA_COLUMNS) + ['ATR']
+    columns = [k + _TA_INTERVAL_SUFFIX.get(tf, '') for tf in timeframes for k in keys]
+    cache_key = ('ta_mtf_v1', screener, symbol, tuple(timeframes))
+    payload = _cache_get(cache_key)
+    if payload is None:
+        q = (
+            Query()
+            .select(*columns)
+            .set_tickers(symbol)
+            .set_markets(screener)
+            .limit(1)
+        )
+        q.query.pop('sort', None)
+        payload = _scan_with_retry(q, cache_key=cache_key, raw=True, throttle=True)
+
+    rows = [r for r in (payload.get('data') or []) if isinstance(r, dict)]
+    row = next((r for r in rows if str(r.get('s', '')).upper() == symbol.upper()), rows[0] if rows else None)
+    values = row.get('d') if row else None
+    exchange, _, ticker = str(row.get('s', symbol) if row else symbol).partition(':')
+
+    out: Dict[str, Any] = {}
+    for i, tf in enumerate(timeframes):
+        if not isinstance(values, list) or len(values) != len(columns):
+            out[tf] = None
+            continue
+        indicators = dict(zip(keys, values[i * len(keys):(i + 1) * len(keys)]))
+        out[tf] = calculate(
+            indicators=indicators,
+            indicators_key=keys,
+            screener=screener,
+            symbol=ticker,
+            exchange=exchange,
+            interval=tf,
+        )
+    return out
+
+
 def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
     """Map our timeframe to TradingView resolution suffix used in columns.
     Returns None if no mapping (means: no suffix).

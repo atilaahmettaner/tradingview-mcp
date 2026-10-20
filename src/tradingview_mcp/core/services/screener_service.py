@@ -37,6 +37,7 @@ from tradingview_mcp.core.utils.validators import (
 from tradingview_mcp.core.services.screener_provider import (
     _scan_with_retry,
     humanize_upstream_error,
+    resilient_multi_timeframe_analysis,
     resilient_scan_columns,
 )
 
@@ -90,20 +91,6 @@ def _batch_budget_s() -> float:
         return max(1.0, v)
     except Exception:
         return 30.0
-
-
-def _fill_skipped_tfs(
-    tf_results: dict, all_timeframes: list, reason: str
-) -> None:
-    """Mark every timeframe not yet in ``tf_results`` as skipped.
-
-    Used by the multi-timeframe loop after fast-fail trips so the response
-    explicitly distinguishes "we tried and got an error" from "we never
-    asked because we bailed early".
-    """
-    for tf in all_timeframes:
-        if tf not in tf_results:
-            tf_results[tf] = {"error": f"skipped: {reason}"}
 
 
 # ── Bollinger / trending fetchers ──────────────────────────────────────────────
@@ -1098,7 +1085,10 @@ def run_multi_timeframe_analysis(
     """
     Multi-timeframe alignment analysis (Weekly → Daily → 4H → 1H → 15m).
 
-    Runs analysis across 5 timeframes and computes a directional consensus.
+    Fetches all 5 timeframes in ONE scanner request (see
+    resilient_multi_timeframe_analysis) and computes a directional consensus.
+    Raises ScreenerServiceError (UPSTREAM_ERROR / NO_DATA) when no timeframe
+    has data, rather than reporting an outage as a "mixed" market.
 
     Args:
         symbol:   Full symbol string with exchange prefix (e.g. 'KUCOIN:BTCUSDT').
@@ -1132,107 +1122,72 @@ def run_multi_timeframe_analysis(
         "15m": "15-Min (Execution)",
     }
 
+    try:
+        analyses = resilient_multi_timeframe_analysis(screener, symbol, timeframes)
+    except Exception as exc:
+        # The one request kept failing and nothing usable was cached, so no
+        # timeframe has data. Say so: an all-failed loop used to fall through
+        # to "MIXED/RANGING - HOLD/NO TRADE", an outage dressed as analysis.
+        raise ScreenerServiceError(
+            ErrorCode.UPSTREAM_ERROR,
+            humanize_upstream_error(exc),
+            symbol=symbol,
+            retryable=True,
+        ) from exc
+
     tf_results: dict = {}
     # (timeframe, bias) pairs recorded together at the success site. Keeping
     # them paired matters: a bare score list zipped against the full
     # `timeframes` later misattributes every score after a failed timeframe
-    # (1W errors → 1D's score reported under the "1W" key, and so on).
+    # (1W errors -> 1D's score reported under the "1W" key, and so on).
     alignment_scores: list[tuple[str, int]] = []
 
-    # Fast-fail guards: 5 timeframes × (~5s retries + 15s cooldown) ≈ 100s
-    # when upstream cliffs. Bail after N consecutive failures, or when the
-    # wall-clock budget is gone, so the tool returns in bounded time with
-    # whatever timeframes did succeed (or an error envelope on zero success).
-    max_consec = _batch_max_consecutive_fails()
-    budget_s = _batch_budget_s()
-    started_at = _time.time()
-    consecutive_failures = 0
-    aborted_remaining: list[str] = []
-
     for tf in timeframes:
-        # Wall-clock guard.
-        if (_time.time() - started_at) >= budget_s:
-            aborted_remaining = [t for t in timeframes if t not in tf_results]
-            try:
-                print(
-                    f"[tradingview_mcp] run_multi_timeframe_analysis aborted: "
-                    f"wall-clock budget ({budget_s:.0f}s) exhausted; "
-                    f"skipped: {aborted_remaining}",
-                    file=sys.stderr,
-                )
-            except Exception:
-                pass
-            for skip_tf in aborted_remaining:
-                tf_results[skip_tf] = {"error": "skipped: wall-clock budget exhausted"}
-            break
+        data = analyses.get(tf)
+        if data is None:
+            # The scanner answered but has no data for this timeframe
+            # (illiquid or newly-listed symbol).
+            tf_results[tf] = {"error": f"No data for {tf}"}
+            continue
 
-        try:
-            analysis = get_multiple_analysis(screener=screener, interval=tf, symbols=[symbol])
-            if symbol not in analysis or analysis[symbol] is None:
-                # Upstream responded but has no data for this tf (illiquid or
-                # newly-listed symbol). This is NOT an upstream cliff, so it
-                # must not count toward the consecutive-failure bail — a real
-                # response proves upstream is up, so reset the counter.
-                tf_results[tf] = {"error": f"No data for {tf}"}
-                consecutive_failures = 0
-                continue
-            consecutive_failures = 0  # Reset on real success.
+        # Copy before mutating: the analysis may come from the provider's
+        # TTL cache. ATR arrived in the same request, per timeframe.
+        indicators = dict(data.indicators)
+        metrics = compute_metrics(indicators)
+        extended = extract_extended_indicators(indicators)
+        tf_context = analyze_timeframe_context(indicators, tf)
 
-            data = analysis[symbol]
-            # Copy before mutating — the dict may be shared via the provider's
-            # TTL cache (see analyze_coin).
-            indicators = dict(data.indicators)
-            # Backfill ATR per-timeframe — the ATR column on the scanner is
-            # resolution-suffixed, so we cannot share the response across the
-            # 5 timeframes. One POST per timeframe is acceptable (5 total)
-            # because run_multi_timeframe_analysis is a single-symbol path.
-            if indicators.get("ATR") is None:
-                from tradingview_mcp.core.services.screener_provider import fetch_atr_for_ticker
-                atr_value = fetch_atr_for_ticker(symbol, screener, tf)
-                if atr_value is not None:
-                    indicators["ATR"] = atr_value
-            metrics = compute_metrics(indicators)
-            extended = extract_extended_indicators(indicators)
-            tf_context = analyze_timeframe_context(indicators, tf)
+        bias_num = 1 if tf_context["bias"] == "Bullish" else -1 if tf_context["bias"] == "Bearish" else 0
+        alignment_scores.append((tf, bias_num))
 
-            bias_num = 1 if tf_context["bias"] == "Bullish" else -1 if tf_context["bias"] == "Bearish" else 0
-            alignment_scores.append((tf, bias_num))
+        tf_results[tf] = {
+            "label": tf_labels.get(tf, tf),
+            "bias": tf_context["bias"],
+            "bias_reasons": tf_context["bias_reasons"],
+            "key_indicators": tf_context["key_indicators_for_timeframe"],
+            "advice": tf_context["advice"],
+            "price": metrics.get("price") if metrics else None,
+            "change_pct": metrics.get("change") if metrics else None,
+            "rsi": extended["rsi"],
+            "macd_crossover": extended["macd"]["crossover"],
+            "ema_trend": {
+                "ema20": extended["ema"].get("ema20"),
+                "ema50": extended["ema"].get("ema50"),
+                "ema200": extended["ema"].get("ema200"),
+            },
+            "volume_signal": extended["volume"]["signal"],
+            "market_structure": extended["market_structure"]["trend"],
+            "trend_strength": extended["market_structure"]["trend_strength"],
+            "momentum_aligned": extended["market_structure"]["momentum_aligned"],
+        }
 
-            tf_results[tf] = {
-                "label": tf_labels.get(tf, tf),
-                "bias": tf_context["bias"],
-                "bias_reasons": tf_context["bias_reasons"],
-                "key_indicators": tf_context["key_indicators_for_timeframe"],
-                "advice": tf_context["advice"],
-                "price": metrics.get("price") if metrics else None,
-                "change_pct": metrics.get("change") if metrics else None,
-                "rsi": extended["rsi"],
-                "macd_crossover": extended["macd"]["crossover"],
-                "ema_trend": {
-                    "ema20": extended["ema"].get("ema20"),
-                    "ema50": extended["ema"].get("ema50"),
-                    "ema200": extended["ema"].get("ema200"),
-                },
-                "volume_signal": extended["volume"]["signal"],
-                "market_structure": extended["market_structure"]["trend"],
-                "trend_strength": extended["market_structure"]["trend_strength"],
-                "momentum_aligned": extended["market_structure"]["momentum_aligned"],
-            }
-        except Exception as exc:
-            tf_results[tf] = {"error": str(exc)}
-            consecutive_failures += 1
-            if consecutive_failures >= max_consec:
-                try:
-                    print(
-                        f"[tradingview_mcp] run_multi_timeframe_analysis aborted: "
-                        f"{consecutive_failures} consecutive timeframe failures "
-                        f"(upstream cliff)",
-                        file=sys.stderr,
-                    )
-                except Exception:
-                    pass
-                _fill_skipped_tfs(tf_results, timeframes, "upstream cliff")
-                break
+    if not alignment_scores:
+        raise ScreenerServiceError(
+            ErrorCode.NO_DATA,
+            f"TradingView has no data for {symbol} on any timeframe. "
+            "Check the symbol and the exchange.",
+            symbol=symbol,
+        )
 
     total_score = sum(s for _, s in alignment_scores)
     all_bullish = all(s > 0 for _, s in alignment_scores) if alignment_scores else False
