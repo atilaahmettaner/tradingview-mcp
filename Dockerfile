@@ -1,6 +1,10 @@
 # ---- Stage 1: Build ----
 FROM python:3.11-slim AS builder
 
+# eMudhra/emSign CA incident (Oct 2026): python base images built before the fix ship a pip and
+# certifi that still trust the compromised chain. Upgrade both before anything else touches PyPI.
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.2" "certifi>=2026.10.19"
+
 # Install system deps and uv
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -25,6 +29,10 @@ COPY --from=builder /usr/local/bin/tradingview-mcp /usr/local/bin/tradingview-mc
 
 # Copy app source (needed for coinlist data files etc.)
 COPY --from=builder /app /app
+
+# eMudhra/emSign CA incident (Oct 2026): python base images built before the fix ship a pip and
+# certifi that still trust the compromised chain. Upgrade both before anything else touches PyPI.
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.2" "certifi>=2026.10.19"
 
 # Create non-root user for security
 RUN useradd -m mcpuser && chown -R mcpuser:mcpuser /app
