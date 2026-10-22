@@ -36,6 +36,12 @@ dependencies = [
   # every install at import time — the exact failure mode the two pins above
   # exist to prevent.
   "pandas>=2",
+  # Upper bound excludes 3.x: python-dateutil 3.0.0 (21 Oct 2026) rewrote
+  # tz.tzfile, and pandas 2.3.3 then fails on dateutil time zones
+  # (pd.Timestamp(..., tz="dateutil/America/New_York") raises AttributeError:
+  # 'NoneType' object has no attribute 'total_seconds'). pandas only asks for
+  # >=2.8.2, so without this a Docker rebuild (which ignores uv.lock) pulls 3.0.0.
+  "python-dateutil>=2.8.2,<3",
   "requests>=2.32",
   # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
   # *stock* preset filter that silently returns 0 rows for crypto/futures
