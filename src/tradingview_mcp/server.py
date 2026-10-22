@@ -934,7 +934,9 @@ async def stock_extended_hours(symbol: str) -> dict:
         symbol: US stock symbol — AAPL, NVDA, TSLA, SPY, ^GSPC, etc.
 
     Returns:
-        - pre_market: {price, as_of_utc, change_vs_previous_close_pct} or null
+        - pre_market: {price, as_of_utc, change_vs_previous_close_pct, reference_close} or null;
+          the change is measured from reference_close, the last regular close
+          (before the open that is newer than previous_close)
         - regular: {price, as_of_utc, change_pct} (consolidated tape close)
         - post_market: {price, as_of_utc, change_vs_regular_close_pct} or null
         - previous_close, currency, exchange, market_state for context
