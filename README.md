@@ -12,9 +12,9 @@
 **TradingView MCP server** — real-time market data, technical indicators, screeners, and backtesting for Claude, ChatGPT, Cursor, Copilot, and any MCP client. Stocks, crypto, forex & futures across global exchanges.
 Backtesting + live sentiment + Yahoo Finance + 39 technical-analysis tools — the most complete TradingView MCP toolkit, all in one server.
 
-**Don't want to install anything?** [TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=top_cta), the hosted version of this server, gives you all 39 tools as one connector URL for Claude, ChatGPT, Cursor, Copilot or any MCP client. From $9/mo with a 14-day money-back guarantee; self-hosting stays free.
+**Don't want to install anything?** [TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=top_cta), the hosted version of this server, gives you all 39 tools in your AI app. In Claude, Cursor or Grok, add `https://mcp.tradingmcp.ai/mcp` as a connector and sign in: no key to paste. ChatGPT, Copilot and other MCP clients connect with a private link. From $9/mo with a 14-day money-back guarantee; self-hosting stays free.
 
-**[Morning market brief in one prompt](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=brief):** ask "give me this morning's market brief" and get global indices, futures, the Bitcoin pulse and the hosted Markets panel in one answer. Charts are drawn right in the chat (demo below).
+**[Morning market brief in one prompt](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=brief):** ask "give me this morning's market brief" and get global indices, futures, the Bitcoin pulse and the hosted Markets panel in one answer. Charts are drawn right in the chat (demo below). In Grok Bot, [add the Market Brief bot](https://x.ai/bot/7KuzDNTqOKomzcZirrvdz) to get one every weekday morning.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/atilaahmettaner/tradingview-mcp/main/.github/assets/tradingview-mcp-demo.gif" width="820" alt="TradingView MCP in an AI chat: ask for the top gainers on Binance and get ranked, real-time results — one of 39 tools" />
@@ -26,7 +26,7 @@ Backtesting + live sentiment + Yahoo Finance + 39 technical-analysis tools — t
   <img src="https://raw.githubusercontent.com/atilaahmettaner/tradingview-mcp/main/docs/assets/bollinger-15m-chart-demo.gif" width="820" alt="MCP Apps demo: asking Claude for a 15-minute Bollinger chart — an interactive candlestick chart with Bollinger Bands renders inside the conversation and Claude analyzes the band values" />
 </p>
 
-**[Paste one URL](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=paste_url) (or `pip install`), then just ask.** Real output, straight from the live server:
+**[Add one URL and sign in](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=paste_url) (or `pip install`), then just ask.** Real output, straight from the live server:
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/atilaahmettaner/tradingview-mcp/main/assets/showcase-top-gainers.png" width="820" alt="Real output: top crypto gainers on KuCoin with 24h change, RSI and signal — ranked table returned in chat" />
@@ -73,7 +73,7 @@ If you want an AI clicking around *your* TradingView Desktop — editing Pine Sc
 > **Not financial advice.** Nothing produced by this software is investment, financial, legal, tax, or accounting advice. tradingview-mcp is an informational and educational analysis tool. Its outputs, including indicators, scores, signals, "trade setups", entries, stop losses, and targets, are computed from third party market data and are **not** recommendations to buy, sell, or hold any asset. It does not execute trades, manage money, or guarantee any result. Trading and investing carry a substantial risk of loss, and you can lose some or all of your capital. Always do your own research and consult a licensed professional before making any financial decision. You are solely responsible for your own decisions and for complying with the laws and regulations that apply to you. Market data may be delayed, inaccurate, or incomplete, and is provided without warranty.
 
 > [!TIP]
-> **Prefer zero setup? Use the hosted version.** [**TradingMCP**](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=tip) serves all 39 tools as one connector URL for Claude.ai, ChatGPT, Copilot, and Cursor — no `uv`, `pandas`, or Python to wrangle. **From $9/mo (Pro) or $29/mo (Pro+ — higher limits), with a 14-day money-back guarantee.** Self-hosting stays free forever; hosted is just for folks who'd rather skip the ops. *(Full self-host vs hosted comparison in Quick Start below.)*
+> **Prefer zero setup? Use the hosted version.** [**TradingMCP**](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=tip) serves all 39 tools in Claude, ChatGPT, Cursor, Grok and Copilot — no `uv`, `pandas`, or Python to wrangle, and in Claude, Cursor and Grok you just sign in instead of pasting a key. **From $9/mo (Pro) or $29/mo (Pro+ — higher limits), with a 14-day money-back guarantee.** Self-hosting stays free forever; hosted is just for folks who'd rather skip the ops. *(Full self-host vs hosted comparison in Quick Start below.)*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/downloads/)
@@ -149,13 +149,13 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 | | 🧑‍💻 Self-host (this repo) | ☁️ Hosted — [TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=quickstart_table) |
 |---|---|---|
 | **Price** | Free forever (MIT) | $9/mo Pro · $29/mo Pro+ · 14-day money-back guarantee |
-| **Time to first call** | ~5 minutes (Python + `uv`) | ~60 seconds (paste one URL) |
+| **Time to first call** | ~5 minutes (Python + `uv`) | ~60 seconds (add one URL, sign in) |
 | **Updates & ops** | You run and update it | Managed — always on the latest |
 | **Runs on** | Your machine or VPS | Hosted, streamed from the edge |
 | **Limits** | Your hardware | 2,500/mo · 60/min (Pro) → 10,000/mo · 150/min (Pro+) |
 | **Best for** | Tinkerers, forkers, full control | Folks who'd rather skip the ops |
 
-> ☁️ **Zero setup:** paste one connector URL into Claude.ai, ChatGPT, Copilot, or Cursor → **[get started with TradingMCP from $9/mo](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=quickstart_cta)** (14-day money-back guarantee). Everything below is for self-hosting.
+> ☁️ **Zero setup:** add `https://mcp.tradingmcp.ai/mcp` as a connector in Claude, Cursor or Grok and sign in; ChatGPT, Copilot and other clients use your private link → **[get started with TradingMCP from $9/mo](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=quickstart_cta)** (14-day money-back guarantee) · [setup guide](https://tradingmcp.ai/docs?utm_source=github&utm_medium=readme&utm_content=quickstart_docs). Everything below is for self-hosting.
 
 ### Install via pip
 ```bash
@@ -235,7 +235,7 @@ TradingView launched its own MCP server in public beta on 16 Sep 2026. It is a g
 
 **Where TradingView's MCP wins:** fundamentals and analyst forecasts, SEC filings and earnings-call transcripts, editing your TradingView watchlists and alerts, and data that comes officially from TradingView itself ([docs](https://www.tradingview.com/mcp/docs), checked Oct 2026). If that is what you need, use theirs, or run both side by side.
 
-[Try TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=vs_official) · works in Claude, ChatGPT, Cursor, Copilot or any MCP client.
+[Try TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=vs_official) · works in Claude, ChatGPT, Cursor, Grok, Copilot or any MCP client.
 
 </details>
 
