@@ -1,6 +1,6 @@
 # 🛠️ Installation Guide - TradingView MCP Server
 
-> ☁️ **This is the self-hosting guide (free, MIT).** Prefer to skip the setup entirely? The same 30+ tools are available hosted as one connector URL for Claude.ai, ChatGPT, Copilot & Cursor at **[pro.cryptosieve.com](https://pro.cryptosieve.com)** — from $9/mo, 3-day free trial.
+> ☁️ **This is the self-hosting guide (free, MIT).** Prefer to skip the setup entirely? [**TradingMCP**](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=installation), the hosted version of this server, gives you the same 39 tools in your AI app. In Claude, Cursor or Grok, add `https://mcp.tradingmcp.ai/mcp` as a connector and sign in: no key to paste. ChatGPT, Copilot and other MCP clients connect with a private link. From $9/mo with a 14-day money-back guarantee; self-hosting stays free.
 
 ## Prerequisites
 
