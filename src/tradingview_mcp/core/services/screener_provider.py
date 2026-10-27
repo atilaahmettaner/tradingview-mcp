@@ -54,6 +54,35 @@ def _ensure_socket_timeout() -> None:
 _ensure_socket_timeout()
 
 
+# --- One indicators dict per tradingview_ta Analysis (added 2026-10-27) ----
+# tradingview_ta.main.Analysis declares `indicators = {}` on the class, and
+# calculate() fills it with `analysis.indicators[key] = value` before copying
+# it onto the instance. Those writes land in the one dict every Analysis
+# shares, so a column one request asks for and the next doesn't stays behind:
+# multi_timeframe_analysis is the only request that includes ATR, and from
+# then on coin_analysis reported that symbol's ATR for every other symbol (BTC
+# 4h read 0.0003, DOGE's) and skipped its own ATR lookup. Threads computing at
+# the same moment could also swap values. With an instance dict per Analysis,
+# calculate() fills that one instead.
+def _give_each_analysis_its_own_indicators() -> None:
+    try:
+        from tradingview_ta.main import Analysis  # type: ignore
+    except Exception:
+        return  # not installed: the callers already report that
+    # Only the class-attribute version has the problem. A release that sets up
+    # its own instance state in __init__ is left alone.
+    if Analysis.__init__ is not object.__init__:
+        return
+
+    def __init__(self) -> None:
+        self.indicators = {}
+
+    Analysis.__init__ = __init__
+
+
+_give_each_analysis_its_own_indicators()
+
+
 # --- Resilience layer (added 2026-05-13, hardened 2026-05-20) --------------
 # TradingView's scanner.tradingview.com endpoint occasionally returns an empty
 # body on transient hiccups, causing tradingview-screener to raise
