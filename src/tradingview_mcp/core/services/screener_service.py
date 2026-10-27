@@ -26,7 +26,12 @@ from tradingview_mcp.core.errors import (
 )
 from tradingview_mcp.core.types import IndicatorMap, Row
 from tradingview_mcp.core.services.coinlist import exchanges_listing_symbol, load_symbols
-from tradingview_mcp.core.services.indicators import compute_metrics
+from tradingview_mcp.core.services.indicators import (
+    compute_bb_rating_signal,
+    compute_bbw,
+    compute_change,
+    compute_metrics,
+)
 from tradingview_mcp.core.utils.validators import (
     EXCHANGE_SCREENER,
     get_market_type,
@@ -236,6 +241,9 @@ def fetch_trending_analysis(
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
     batch_size = _SCAN_CHUNK
     all_coins: List[Row] = []
+    unfiltered = type(filter_type) is str and (
+        filter_type != "rating" or rating_filter is None
+    )
 
     batches_attempted = 0
     batches_failed = 0
@@ -306,20 +314,51 @@ def fetch_trending_analysis(
 
         for key, indicators in analysis.items():
             try:
-                metrics = compute_metrics(indicators)
-                if not metrics or metrics.get("bbw") is None:
-                    continue
-                if filter_type == "rating" and rating_filter is not None:
-                    if metrics["rating"] != rating_filter:
+                open_price = indicators["open"]
+                close = indicators["close"]
+                sma = indicators["SMA20"]
+                bb_upper = indicators["BB.upper"]
+                bb_lower = indicators["BB.lower"]
+
+                if (
+                    unfiltered
+                    and type(open_price) is float
+                    and type(close) is float
+                    and type(sma) is float
+                    and type(bb_upper) is float
+                    and type(bb_lower) is float
+                ):
+                    # Float-only band calculations cannot fail; only a zero
+                    # SMA excludes a row when no rating filter is active.
+                    if not sma:
                         continue
+                    change = ((close - open_price) / open_price) * 100 if open_price else 0.0
+                    price = round(close, 4)
+                    rounded_open = round(open_price, 4)
+                    change = round(change, 3)
+                else:
+                    # Keep the full calculation and rounding order for custom
+                    # numeric objects and malformed indicator values.
+                    change = compute_change(open_price, close)
+                    bbw = compute_bbw(sma, bb_upper, bb_lower)
+                    rating, _signal = compute_bb_rating_signal(close, bb_upper, sma, bb_lower)
+                    price = round(close, 4)
+                    rounded_open = round(open_price, 4)
+                    change = round(change, 3)
+                    bbw = round(bbw, 4) if bbw is not None else None
+                    if bbw is None:
+                        continue
+                    if filter_type == "rating" and rating_filter is not None:
+                        if rating != rating_filter:
+                            continue
 
                 all_coins.append(
                     Row(
                         symbol=key,
-                        changePercent=metrics["change"],
+                        changePercent=change,
                         indicators=IndicatorMap(
-                            open=metrics.get("open"),
-                            close=metrics.get("price"),
+                            open=rounded_open,
+                            close=price,
                             SMA20=indicators.get("SMA20"),
                             BB_upper=indicators.get("BB.upper"),
                             BB_lower=indicators.get("BB.lower"),
