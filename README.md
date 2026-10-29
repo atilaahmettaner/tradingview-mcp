@@ -14,7 +14,15 @@ Backtesting + live sentiment + Yahoo Finance + 39 technical-analysis tools — t
 
 **Don't want to install anything?** [TradingMCP](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=top_cta), the hosted version of this server, gives you all 39 tools in your AI app. In Claude, Cursor or Grok, add `https://mcp.tradingmcp.ai/mcp` as a connector and sign in: no key to paste. ChatGPT, Copilot and other MCP clients connect with a private link. From $9/mo with a 14-day money-back guarantee; self-hosting stays free.
 
-**[Morning market brief in one prompt](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=brief):** ask "give me this morning's market brief" and get global indices, futures, the Bitcoin pulse and the hosted Markets panel in one answer. Charts are drawn right in the chat (demo below). In Grok Bot, [add the Market Brief bot](https://x.ai/bot/7KuzDNTqOKomzcZirrvdz) to get one every weekday morning.
+<p align="center">
+  <a href="https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=TradingMCP&connectorUrl=https%3A%2F%2Fmcp.tradingmcp.ai%2Fmcp"><img src="https://img.shields.io/badge/Add_to-Claude-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Add TradingMCP to Claude" height="32"></a>
+  &nbsp;
+  <a href="https://tradingmcp.ai/connect?utm_source=github&utm_medium=readme&utm_content=add_to_cursor#cursor"><img src="https://img.shields.io/badge/Add_to-Cursor-1d1e1b?style=for-the-badge&logo=cursor&logoColor=white" alt="Add TradingMCP to Cursor" height="32"></a>
+  <br>
+  <sub>One click opens Claude's connector dialog with TradingMCP filled in; sign in with the email you subscribe with. Other apps: <a href="https://tradingmcp.ai/connect?utm_source=github&utm_medium=readme&utm_content=connect_other">tradingmcp.ai/connect</a></sub>
+</p>
+
+**[Morning market brief in one prompt](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=brief):** ask "give me this morning's market brief" and get global indices, futures, the Bitcoin pulse and the hosted Markets panel in one answer. Charts are drawn right in the chat (demo below). In Grok Bot, [add the Market Brief bot](https://x.ai/bot/7KuzDNTqOKomzcZirrvdz) to get one on weekday mornings.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/atilaahmettaner/tradingview-mcp/main/.github/assets/tradingview-mcp-demo.gif" width="820" alt="TradingView MCP in an AI chat: ask for the top gainers on Binance and get ranked, real-time results — one of 39 tools" />
