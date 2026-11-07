@@ -8,6 +8,13 @@ services:
     ports:
       - "8080:8000"
     restart: unless-stopped
+    # .env.example asks users to put MARKETAUX_API_TOKEN / MARKETAUX_DAILY_BUDGET
+    # / PROXY_* in .env — compose only reads that file for variable substitution,
+    # so it must be declared here to actually reach the container (#131).
+    # required:false keeps `docker compose up` working without a .env.
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Optional: Add any future API keys or environment variables here
       - PORT=8000
