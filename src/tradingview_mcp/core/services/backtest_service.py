@@ -731,17 +731,27 @@ def compare_strategies(
             "expectancy_pct":   m["expectancy_pct"],
         })
 
-    results.sort(key=lambda x: x["total_return_pct"], reverse=True)
+    # A strategy that never traded reports 0%, which outranked every strategy
+    # that traded and lost money, so a falling market named a strategy with no
+    # trades the winner. Strategies that traded rank first, by return; the
+    # rest go last and are never the winner.
+    results.sort(key=lambda x: (x["total_trades"] > 0, x["total_return_pct"]), reverse=True)
     for i, r in enumerate(results):
         r["rank"] = i + 1
+    traded = [r for r in results if r["total_trades"] > 0]
 
     bnh = _buy_and_hold_return(candles, commission_pct, slippage_pct)
 
-    warnings = None
+    notes = []
     if not sma200_ok:
-        warnings = (f"Strategies {sorted(_SMA200_STRATEGIES)} need ≥{_SMA200_MIN_BARS} "
-                    f"bars (use period='1y' or '2y') to produce signals; "
-                    f"their zero-trade results below are not meaningful.")
+        notes.append(f"Strategies {sorted(_SMA200_STRATEGIES)} need ≥{_SMA200_MIN_BARS} "
+                     f"bars (use period='1y' or '2y') to produce signals; "
+                     f"their zero-trade results below are not meaningful.")
+    no_trades = [r["strategy"] for r in results if r["total_trades"] == 0]
+    if no_trades:
+        notes.append(f"No trades in this period: {', '.join(no_trades)}. "
+                     f"Strategies without trades rank last and can't be the winner.")
+    warnings = " ".join(notes) or None
 
     return {
         "symbol":                  symbol.upper(),
@@ -755,7 +765,7 @@ def compare_strategies(
         "commission_pct":          commission_pct,
         "slippage_pct":            slippage_pct,
         "buy_and_hold_return_pct": bnh,
-        "winner":                  results[0]["strategy"] if results else None,
+        "winner":                  traded[0]["strategy"] if traded else None,
         "ranking":                 results,
         "warnings":                warnings,
         "disclaimer":              "Past performance does not guarantee future results.",

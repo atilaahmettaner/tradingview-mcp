@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **`compare_strategies` could name a strategy with no trades the winner**:
+  the leaderboard was sorted by return alone, and a strategy that never
+  trades reports 0%. When buy-and-hold and every strategy that traded lost
+  money, that 0% came first, so rank 1 and `winner` went to a strategy with
+  no trades (APP on 1y daily: `rsi_pullback`, 0 trades, buy-and-hold −37%).
+  Strategies that traded now rank first, by return; strategies without
+  trades rank last and are never the winner. `winner` is null when no
+  strategy traded, and `warnings` names the strategies without trades.
 - **No volume baseline in the TA-based tools** (`coin_analysis`,
   `multi_timeframe_analysis`, the stock score and trade quality, and the EGX
   tools): the indicator helpers divided by a `volume.SMA20` column that
