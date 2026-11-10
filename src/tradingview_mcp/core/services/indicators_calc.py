@@ -198,48 +198,77 @@ def calc_supertrend(
     Supertrend indicator.
     Returns dict with:
       'direction': 1 (bullish) or -1 (bearish) per candle (None before warmup)
-      'upper': upper band values
-      'lower': lower band values
+      'upper': final upper band values
+      'lower': final lower band values
+
+    Direction flips only when a close penetrates the PREVIOUS bar's final
+    band, and carries forward otherwise — that persistence is what makes
+    Supertrend a trend-following indicator rather than a per-bar comparison.
+
+    An earlier version compared each close against its own bar's bands
+    (``close > upper`` to go bullish, ``close <= upper`` to stay bearish).
+    Because the bands sit ``multiplier * ATR`` either side of the bar's own
+    midpoint, a close can essentially never clear its own upper band, so
+    direction initialised to -1 and stayed there: the indicator returned
+    bearish on every bar of every series and never flipped. Anything reading
+    flips (the ``supertrend`` backtest strategy) therefore never traded.
+
+    The seed bar has no previous band to cross, so direction starts from the
+    close's position relative to its SMA over the warm-up window: above the
+    average is an uptrend, below it a downtrend. Seeding a constant (as some
+    implementations do) mislabels whichever direction it guesses wrong until
+    price first penetrates a band, which on a wide multiplier can be dozens
+    of bars.
     """
     n = len(closes)
     atr = calc_atr(highs, lows, closes, atr_period)
+    sma = calc_sma(closes, atr_period)
 
     direction: list[Optional[int]] = [None] * n
     upper: list[Optional[float]] = [None] * n
     lower: list[Optional[float]] = [None] * n
 
-    # prev values for smoothing
-    prev_upper = None
-    prev_lower = None
-    prev_dir   = None
+    prev_upper: Optional[float] = None
+    prev_lower: Optional[float] = None
+    prev_dir: Optional[int] = None
 
-    for i in range(1, n):
+    for i in range(n):
         if atr[i] is None:
             continue
 
-        hl2  = (highs[i] + lows[i]) / 2.0
-        u    = hl2 + multiplier * atr[i]
-        l    = hl2 - multiplier * atr[i]
+        hl2 = (highs[i] + lows[i]) / 2.0
+        basic_upper = hl2 + multiplier * atr[i]
+        basic_lower = hl2 - multiplier * atr[i]
 
-        # Adjust bands to avoid widening
-        if prev_upper is not None:
-            u = min(u, prev_upper) if closes[i - 1] < prev_upper else u
-            l = max(l, prev_lower) if closes[i - 1] > prev_lower else l
-
-        upper[i] = u
-        lower[i] = l
-
-        # Determine direction
-        if prev_dir is None:
-            direction[i] = 1 if closes[i] > u else -1
-        elif prev_dir == 1:
-            direction[i] = 1 if closes[i] >= l else -1
+        if prev_upper is None or prev_lower is None or prev_dir is None:
+            # Seed bar: no previous band to cross.
+            final_upper, final_lower = basic_upper, basic_lower
+            reference = sma[i] if sma[i] is not None else hl2
+            dir_i = 1 if closes[i] >= reference else -1
         else:
-            direction[i] = -1 if closes[i] <= u else 1
+            # Final bands only tighten while price stays on their side; once
+            # price closes through, the band resets to the basic value.
+            final_upper = (
+                min(basic_upper, prev_upper) if closes[i - 1] <= prev_upper else basic_upper
+            )
+            final_lower = (
+                max(basic_lower, prev_lower) if closes[i - 1] >= prev_lower else basic_lower
+            )
 
-        prev_upper = u
-        prev_lower = l
-        prev_dir   = direction[i]
+            if closes[i] > prev_upper:
+                dir_i = 1
+            elif closes[i] < prev_lower:
+                dir_i = -1
+            else:
+                dir_i = prev_dir
+
+        direction[i] = dir_i
+        upper[i] = final_upper
+        lower[i] = final_lower
+
+        prev_upper = final_upper
+        prev_lower = final_lower
+        prev_dir = dir_i
 
     return {"direction": direction, "upper": upper, "lower": lower}
 
