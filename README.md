@@ -22,6 +22,8 @@ Backtesting + live sentiment + Yahoo Finance + 39 technical-analysis tools — t
   <sub>One click opens Claude's connector dialog with TradingMCP filled in; sign in with the email you subscribe with. Other apps: <a href="https://tradingmcp.ai/connect?utm_source=github&utm_medium=readme&utm_content=connect_other">tradingmcp.ai/connect</a></sub>
 </p>
 
+**Sponsor:** [Whop](https://whop.com/start/?code=TVMCP&utm_source=majoragv&utm_medium=sponsor&utm_campaign=tvmcp): sell your courses, software and communities online.
+
 **[Morning market brief in one prompt](https://tradingmcp.ai/?utm_source=github&utm_medium=readme&utm_content=brief):** ask "give me this morning's market brief" and get global indices, futures, the Bitcoin pulse and the hosted Markets panel in one answer. Charts are drawn right in the chat (demo below). In Grok Bot, [add the Market Brief bot](https://x.ai/bot/7KuzDNTqOKomzcZirrvdz) to get one on weekday mornings.
 
 <p align="center">
