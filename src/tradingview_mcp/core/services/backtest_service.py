@@ -587,8 +587,8 @@ def _validate_numeric_inputs(
       * negative ``commission_pct``/``slippage_pct`` → costs become a *credit*,
         silently inflating every trade's net return above its gross.
     """
-    if initial_capital <= 0:
-        return f"initial_capital must be positive, got {initial_capital}"
+    if not math.isfinite(initial_capital) or initial_capital <= 0:
+        return f"initial_capital must be finite and positive, got {initial_capital}"
     if not (0 <= commission_pct <= _MAX_COST_PCT):
         return f"commission_pct must be between 0 and {_MAX_COST_PCT}, got {commission_pct}"
     if not (0 <= slippage_pct <= _MAX_COST_PCT):
