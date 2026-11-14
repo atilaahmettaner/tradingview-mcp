@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **`coin_analysis` took ~20s while TradingView was refusing requests, then
+  called hour-old numbers "real-time"**: TradingView answers tradingview_ta's
+  requests with empty bodies in bursts of minutes. Every call after the
+  first failure slept out the 15s failure cooldown and retried three times;
+  on the hosted server none of those waits brought live data back (week to
+  2026-11-14: 171 failed fetches, none recovered), and the call ended on the
+  stale cache, up to an hour old, still labelled `"timestamp": "real-time"`.
+  `multi_timeframe_analysis` and the scans slept through the same cooldown
+  although their scanner requests never failed.
+  - While TradingView is refusing, the TA fetch answers from the stale cache
+    at once, or makes a single attempt when nothing is cached. It no longer
+    sleeps. The first failure of a burst keeps its two retries.
+  - A stale `coin_analysis` answer says so: `"timestamp": "delayed"`,
+    `data_age_seconds` and a `data_note`. It no longer pairs the old
+    indicators with a live ATR.
+  - `coin_analysis` has a time budget (`TRADINGVIEW_MCP_TA_DEADLINE_S`,
+    default 8s): each attempt's timeout is cut to what is left, and no retry
+    starts that the budget can't cover.
+  - The scanner path cools down only after its own failures.
 - **`compare_strategies` could name a strategy with no trades the winner**:
   the leaderboard was sorted by return alone, and a strategy that never
   trades reports 0%. When buy-and-hold and every strategy that traded lost
