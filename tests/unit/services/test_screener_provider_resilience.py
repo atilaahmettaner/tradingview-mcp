@@ -24,6 +24,7 @@ def _reset_state():
         sp._SCREENER_CACHE.clear()
     with sp._TA_FAILURE_LOCK:
         sp._LAST_TA_FAILURE_TS = 0.0
+        sp._LAST_SCAN_FAILURE_TS = 0.0
     yield
 
 

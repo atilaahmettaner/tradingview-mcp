@@ -27,6 +27,7 @@ def _reset_state(monkeypatch):
         sp._SCREENER_CACHE.clear()
     with sp._TA_FAILURE_LOCK:
         sp._LAST_TA_FAILURE_TS = 0.0
+        sp._LAST_SCAN_FAILURE_TS = 0.0
     monkeypatch.setenv("TRADINGVIEW_MCP_RETRY_DELAYS", "0.01,0.02")
     monkeypatch.setenv("TRADINGVIEW_MCP_RETRY_JITTER", "0")
     monkeypatch.setenv("TRADINGVIEW_MCP_FAILURE_COOLDOWN_S", "0")

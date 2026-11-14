@@ -39,6 +39,8 @@ from tradingview_mcp.core.services.screener_provider import (
     humanize_upstream_error,
     resilient_multi_timeframe_analysis,
     resilient_scan_columns,
+    ta_call,
+    ta_call_time_left,
 )
 
 try:
@@ -699,6 +701,25 @@ def symbol_not_found_error(symbol: str, exchange: str, **context: Any) -> dict:
     )
 
 
+def _mark_delayed(result: dict, age_s: float, atr_missing: bool) -> None:
+    """Label a coin_analysis answer served from the stale cache.
+
+    TradingView refused (or didn't answer) the live request, so
+    ``"timestamp": "real-time"`` would be untrue; on the hosted server these
+    answers were up to an hour old and said "real-time"."""
+    minutes = max(1, round(age_s / 60))
+    note = (
+        f"TradingView didn't give this server live data just now, so these are the last "
+        f"values it served for this symbol and timeframe, from about {minutes} min ago. "
+        f"Ask again in a minute or two for live values."
+    )
+    if atr_missing:
+        note += " ATR, and anything computed from it, is left out until then."
+    result["timestamp"] = "delayed"
+    result["data_age_seconds"] = int(age_s)
+    result["data_note"] = note
+
+
 def analyze_coin(
     symbol: str,
     exchange: str,
@@ -735,7 +756,11 @@ def analyze_coin(
     screener = resolve_screener_for_symbol(full_symbol, exchange)
 
     try:
-        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+        # One time budget for the whole call (TRADINGVIEW_MCP_TA_DEADLINE_S),
+        # and word back when the answer came from the stale cache.
+        with ta_call() as call:
+            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+        stale_age_s = call["stale_age_s"]
 
         if full_symbol not in analysis or analysis[full_symbol] is None:
             if _allow_venue_fallback:
@@ -760,10 +785,14 @@ def analyze_coin(
         # tradingview_ta omits the ATR column from its analysis payload, leaving
         # downstream consumers (stop-loss sizing, trade quality, volatility
         # scoring) with a None they can't act on. Pull it from the screener
-        # endpoint as a best-effort augmentation.
-        if indicators.get("ATR") is None:
+        # endpoint as a best-effort augmentation. Not for a stale answer:
+        # TradingView just refused the live request, and a live ATR next to
+        # minutes-old indicators would mix two moments.
+        if indicators.get("ATR") is None and stale_age_s is None:
             from tradingview_mcp.core.services.screener_provider import fetch_atr_for_ticker
-            atr_value = fetch_atr_for_ticker(full_symbol, screener, timeframe)
+            atr_value = fetch_atr_for_ticker(
+                full_symbol, screener, timeframe, timeout=ta_call_time_left(call, 10.0)
+            )
             if atr_value is not None:
                 indicators["ATR"] = atr_value
         metrics = compute_metrics(indicators)
@@ -807,7 +836,7 @@ def analyze_coin(
                         trade_data["trade_quality"] = quality["quality"]
                         trade_data["trade_notes"] = quality["notes"]
 
-        return {
+        result = {
             "symbol": full_symbol,
             "exchange": exchange,
             "timeframe": timeframe,
@@ -849,6 +878,9 @@ def analyze_coin(
             },
             **trade_data,
         }
+        if stale_age_s is not None:
+            _mark_delayed(result, stale_age_s, atr_missing=indicators.get("ATR") is None)
+        return result
     except Exception as exc:
         # Transient upstream outages (TradingView's 30-90s empty-body cliffs)
         # dominate this path — signal machine-readable retryability so agents

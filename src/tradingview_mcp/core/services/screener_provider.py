@@ -8,6 +8,8 @@ import random as _random
 import socket as _socket
 import sys as _sys
 import time as _time
+from contextlib import contextmanager as _contextmanager
+from contextvars import ContextVar as _ContextVar
 from threading import RLock as _RLock, Semaphore as _Semaphore, Lock as _Lock
 
 
@@ -115,6 +117,7 @@ _give_each_analysis_its_own_indicators()
 #   TRADINGVIEW_MCP_RETRY_DELAYS default "1.0,4.0"
 #   TRADINGVIEW_MCP_RETRY_JITTER default 0.2  (±20% jitter on each delay)
 #   TRADINGVIEW_MCP_FAILURE_COOLDOWN_S default 15 (seconds)
+#   TRADINGVIEW_MCP_TA_DEADLINE_S default 8 (seconds; budget of one ta_call())
 
 def _cache_ttl_s() -> float:
     try:
@@ -157,13 +160,23 @@ def _jittered(delay: float) -> float:
     return max(0.0, delay * (1.0 + _random.uniform(-j, j)))
 
 
-# --- Shared failure cooldown (added 2026-05-19) ---------------------------
+# --- Failure cooldown (added 2026-05-19, one per request path 2026-11-14) --
 # When a call exhausts all retries (sustained upstream outage), the next
 # call shouldn't immediately re-hammer with another full retry round —
-# that just compounds load on a struggling upstream. After a full-retry
-# failure, subsequent calls wait up to TRADINGVIEW_MCP_FAILURE_COOLDOWN_S
-# seconds before starting their own retry sequence, giving upstream room
-# to recover. The cooldown decays as time passes since last failure.
+# that just compounds load on a struggling upstream.
+#
+# The two request paths fail independently. TradingView answers
+# tradingview_ta's requests with empty bodies in bursts of minutes while the
+# scanner requests tradingview-screener makes keep working: on the hosted
+# server, in the week to 2026-11-14, 171 TA fetches failed and no scanner
+# request did. So each path keeps its own last-failure time, and a TA refusal
+# no longer makes multi_timeframe_analysis or the scans sleep.
+#
+# - Scanner path (_scan_with_retry): after a full-retry failure, subsequent
+#   calls wait up to TRADINGVIEW_MCP_FAILURE_COOLDOWN_S seconds before
+#   starting their own retry sequence. The wait decays with time.
+# - TA path (resilient_get_multiple_analysis): within the same window it
+#   doesn't wait or retry at all; see there.
 def _failure_cooldown_s() -> float:
     # Tightened 2026-05-20: 15s is enough to absorb a brief upstream blip
     # without compounding wait time across multiple skill calls.
@@ -173,7 +186,8 @@ def _failure_cooldown_s() -> float:
         return 15.0
 
 
-_LAST_TA_FAILURE_TS: float = 0.0
+_LAST_TA_FAILURE_TS: float = 0.0    # tradingview_ta path
+_LAST_SCAN_FAILURE_TS: float = 0.0  # tradingview-screener path
 _TA_FAILURE_LOCK = _Lock()
 
 
@@ -183,14 +197,41 @@ def _record_ta_failure() -> None:
         _LAST_TA_FAILURE_TS = _time.time()
 
 
+def _clear_ta_failure() -> None:
+    global _LAST_TA_FAILURE_TS
+    with _TA_FAILURE_LOCK:
+        _LAST_TA_FAILURE_TS = 0.0
+
+
+def _record_scan_failure() -> None:
+    global _LAST_SCAN_FAILURE_TS
+    with _TA_FAILURE_LOCK:
+        _LAST_SCAN_FAILURE_TS = _time.time()
+
+
+def _ta_refusal_age_s() -> Optional[float]:
+    """Seconds since a TA fetch last exhausted its attempts, while that is
+    inside the cooldown window, else None. A success clears it."""
+    cooldown = _failure_cooldown_s()
+    if cooldown <= 0:
+        return None
+    with _TA_FAILURE_LOCK:
+        ts = _LAST_TA_FAILURE_TS
+    if ts == 0.0:
+        return None
+    age = _time.time() - ts
+    return age if age < cooldown else None
+
+
 def _wait_for_failure_cooldown() -> None:
-    """If a previous call recently exhausted all retries, sleep until the
-    cooldown elapses before starting a new retry sequence."""
+    """Scanner path: if a previous scanner call recently exhausted all
+    retries, sleep until the cooldown elapses before starting a new retry
+    sequence."""
     cooldown = _failure_cooldown_s()
     if cooldown <= 0:
         return
     with _TA_FAILURE_LOCK:
-        ts = _LAST_TA_FAILURE_TS
+        ts = _LAST_SCAN_FAILURE_TS
     if ts == 0.0:
         return
     elapsed = _time.time() - ts
@@ -318,6 +359,58 @@ def _ta_throttle_release() -> None:
     _TA_SEMAPHORE.release()
 
 
+# --- Per-call budget for the TA path (added 2026-11-14) --------------------
+# coin_analysis has to answer within a bounded time and say when its numbers
+# came from the stale cache. Both travel in a context variable instead of new
+# parameters, so every get_multiple_analysis caller (and test fake) keeps its
+# signature; only code that opens a ta_call() gets a budget.
+_MIN_ATTEMPT_S = 2.0  # never cut one request's timeout below this
+_TA_CALL: _ContextVar = _ContextVar("tradingview_mcp_ta_call", default=None)
+
+
+def _ta_deadline_s() -> float:
+    try:
+        return max(0.0, float(_os.environ.get('TRADINGVIEW_MCP_TA_DEADLINE_S', '8')))
+    except Exception:
+        return 8.0
+
+
+@_contextmanager
+def ta_call(deadline_s: Optional[float] = None):
+    """Give the TA fetches made inside this block one wall-clock budget, and
+    report how they were answered.
+
+    Yields a dict. ``stale_age_s`` is the age in seconds of the stale-cache
+    result a fetch fell back to, or None while the data is live.
+    ``deadline_at`` is when the budget runs out on the monotonic clock (None
+    with no budget); :func:`ta_call_time_left` turns it into a timeout.
+
+    Args:
+        deadline_s: Budget in seconds. Defaults to TRADINGVIEW_MCP_TA_DEADLINE_S
+            (8); 0 means no budget.
+    """
+    budget = _ta_deadline_s() if deadline_s is None else max(0.0, deadline_s)
+    state = {
+        "deadline_at": _time.monotonic() + budget if budget > 0 else None,
+        "stale_age_s": None,
+    }
+    token = _TA_CALL.set(state)
+    try:
+        yield state
+    finally:
+        _TA_CALL.reset(token)
+
+
+def ta_call_time_left(state: Optional[dict], cap: float) -> float:
+    """Timeout for one more request made under a :func:`ta_call` state:
+    ``cap``, cut to what is left of the budget, but not below a single
+    attempt's floor (a request that just queued gets its chance)."""
+    deadline_at = (state or {}).get("deadline_at")
+    if deadline_at is None:
+        return cap
+    return min(cap, max(_MIN_ATTEMPT_S, deadline_at - _time.monotonic()))
+
+
 def _is_transient_screener_error(e: BaseException) -> bool:
     """True if the error looks like an upstream transient (empty body,
     JSON parse failure, connection reset, rate limit, or socket timeout)."""
@@ -339,12 +432,21 @@ def _is_transient_screener_error(e: BaseException) -> bool:
     ))
 
 
-def _format_transient_error(last_exc: BaseException, attempts: int, total_wait: float) -> str:
-    """Build an actionable terminal error message for callers."""
+def _format_transient_error(
+    last_exc: BaseException, attempts: int, total_wait: float, why: str = ""
+) -> str:
+    """Build an actionable terminal error message for callers.
+
+    ``why`` explains a short attempt count (no retry while TradingView is
+    refusing, or no budget left for one)."""
     base = repr(last_exc)
+    tried = (
+        f"on all {attempts} attempts spanning {total_wait:.0f}s"
+        if attempts > 1 else "on its only attempt"
+    )
     return (
-        f"Upstream TradingView scanner returned transient errors on all "
-        f"{attempts} attempts spanning {total_wait:.0f}s ({base}). "
+        f"Upstream TradingView scanner returned transient errors {tried} ({base}). "
+        f"{why + ' ' if why else ''}"
         f"This is typically a 30-90s empty-body outage at scanner.tradingview.com. "
         f"Wait ~60s before retrying."
     )
@@ -425,7 +527,7 @@ def _scan_with_retry(
                 pass
             continue
     # All attempts exhausted — record failure so subsequent calls back off
-    _record_ta_failure()
+    _record_scan_failure()
     # Last-resort: stale-while-error fallback if we have a cache key
     if cache_key is not None:
         stale = _cache_get_stale(cache_key)
@@ -459,7 +561,19 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     empty body.
 
     Every request also asks for ``TA_EXTRA_COLUMNS``, which land in each
-    ``Analysis.indicators`` under their bare names."""
+    ``Analysis.indicators`` under their bare names.
+
+    While TradingView is refusing TA requests (a fetch exhausted its attempts
+    less than TRADINGVIEW_MCP_FAILURE_COOLDOWN_S ago), this neither sleeps nor
+    retries: it answers from the stale cache at once, or makes one attempt
+    when there is nothing cached. Its refusals come in bursts of minutes; on
+    the hosted server not one call that waited out the cooldown and retried
+    got live data back (week to 2026-11-14), the waits just made coin_analysis
+    take ~20s and the retries tripled the requests inside each burst.
+
+    Inside a :func:`ta_call` block, each attempt's timeout is cut to the
+    budget left, no retry starts that the budget can't cover, and a stale
+    answer is reported in the block's state."""
     try:
         from tradingview_ta import get_multiple_analysis as _gma  # type: ignore
     except Exception as e:
@@ -471,18 +585,44 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     if cached is not None:
         return cached
 
-    _wait_for_failure_cooldown()
-    delays = (0.0,) + _retry_delays()
+    call = _TA_CALL.get()
+    why_short = ""
+    refused_s_ago = _ta_refusal_age_s()
+    if refused_s_ago is not None:
+        stale = _cache_get_stale(cache_key)
+        if stale is not None:
+            return _stale_ta_result(
+                stale, symbols, call,
+                f"without a new attempt: TradingView refused a request {refused_s_ago:.0f}s ago",
+            )
+        delays: tuple = (0.0,)
+        why_short = (
+            f"TradingView refused this server's requests {refused_s_ago:.0f}s ago, "
+            f"so this call did not retry."
+        )
+    else:
+        delays = (0.0,) + _retry_delays()
     last_exc: Optional[BaseException] = None
     total_wait = 0.0
+    attempts = 0
     for i, delay in enumerate(delays):
         wait = _jittered(delay) if delay > 0 else 0.0
         if wait > 0:
+            if _ta_refusal_age_s() is not None:
+                # Another fetch has meanwhile used up its attempts: the refusal
+                # is on, and this retry would only add to it.
+                why_short = "TradingView refused another request meanwhile, so this call stopped retrying."
+                break
+            deadline_at = (call or {}).get("deadline_at")
+            if deadline_at is not None and deadline_at - _time.monotonic() < wait + _MIN_ATTEMPT_S:
+                why_short = "The call's time budget left no room for another attempt."
+                break
             _time.sleep(wait)
             total_wait += wait
         try:
             _ta_throttle_acquire()
             try:
+                attempts += 1
                 # CRITICAL: tradingview_ta defaults timeout=None, which means
                 # requests.post hangs FOREVER on stalled upstream. socket.setdefaulttimeout
                 # does NOT apply to requests/urllib3. Pass timeout explicitly.
@@ -491,11 +631,12 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
                     interval=interval,
                     symbols=symbols,
                     additional_indicators=list(TA_EXTRA_COLUMNS),
-                    timeout=_socket_timeout_s(),
+                    timeout=ta_call_time_left(call, _socket_timeout_s()),
                 )
             finally:
                 _ta_throttle_release()
             _cache_set(cache_key, result)
+            _clear_ta_failure()
             return result
         except Exception as e:  # noqa: BLE001
             if not _is_transient_screener_error(e):
@@ -515,18 +656,26 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     # Last-resort: stale-while-error fallback (up to TRADINGVIEW_MCP_STALE_TTL)
     stale = _cache_get_stale(cache_key)
     if stale is not None:
-        age, payload = stale
-        try:
-            print(
-                f"[tradingview_mcp] returning stale TA cache (age {age:.0f}s, symbols={symbols}) "
-                f"after {len(delays)} failed attempts",
-                file=_sys.stderr,
-            )
-        except Exception:
-            pass
-        return payload
+        return _stale_ta_result(stale, symbols, call, f"after {attempts} failed attempts")
     assert last_exc is not None
-    raise RuntimeError(_format_transient_error(last_exc, len(delays), total_wait)) from last_exc
+    raise RuntimeError(
+        _format_transient_error(last_exc, attempts, total_wait, why_short)
+    ) from last_exc
+
+
+def _stale_ta_result(stale: Tuple[float, Any], symbols, call: Optional[dict], how: str) -> Any:
+    """Return a stale TA payload, logging it and telling the open ta_call()."""
+    age, payload = stale
+    if call is not None:
+        call["stale_age_s"] = age
+    try:
+        print(
+            f"[tradingview_mcp] returning stale TA cache (age {age:.0f}s, symbols={symbols}) {how}",
+            file=_sys.stderr,
+        )
+    except Exception:
+        pass
+    return payload
 
 
 # Column suffix per timeframe, exactly as tradingview_ta builds it: the daily
