@@ -80,6 +80,7 @@ from tradingview_mcp.core.services.futures_service import (
     get_futures_category_snapshot,
     get_futures_watchlist,
 )
+from tradingview_mcp.core.services.futures_redirect import route_futures_request
 from tradingview_mcp.core.services.stock_screener_service import (
     EXAMPLE_MARKETS,
     fetch_stock_prices,
@@ -99,6 +100,7 @@ from tradingview_mcp.core.utils.validators import (
 from tradingview_mcp.core.errors import (
     ErrorCode,
     exception_to_envelope,
+    is_error,
     make_error,
 )
 
@@ -239,7 +241,9 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
     "get_technical_analysis" or "get_technical_summary" tool — use THIS one).
     Use `multi_timeframe_analysis` instead when you need trend alignment
     across several timeframes, and `combined_analysis` when you also want
-    news sentiment + headlines in the same call.
+    news sentiment + headlines in the same call. Futures contracts (ES1!,
+    CL1!, …) and oil/gas/copper are quoted by the futures_* tools, not
+    analysed here; gold, silver, platinum and palladium are (GC1! → TVC:GOLD).
 
     Example: coin_analysis(symbol="BTCUSDT", exchange="BINANCE", timeframe="1h")
 
@@ -252,11 +256,25 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
         Detailed analysis with all indicators and metrics
     """
     try:
-        exchange = validate_exchange(exchange, "KUCOIN")
+        route = route_futures_request(symbol, exchange, "coin_analysis")
+        if route and route.answer:
+            return route.answer
+        requested_exchange = exchange
+        exchange = validate_exchange(route.exchange if route else exchange, "KUCOIN")
         timeframe = validate_timeframe(timeframe, "15m")
-        return analyze_coin(symbol, exchange, timeframe)
+        result = analyze_coin(symbol, exchange, timeframe)
+        return _with_route_note(result, route, requested_exchange)
     except Exception as e:
         return exception_to_envelope(e, context="coin_analysis")
+
+
+def _with_route_note(result, route, requested_exchange: str):
+    """Say so when a futures request was analysed on another venue (COMEX
+    gold futures on TVC's spot feed). No-op without a route or on an error."""
+    if route and route.note and isinstance(result, dict) and not is_error(result):
+        result["requested_exchange"] = requested_exchange
+        result["resolution_note"] = route.note
+    return result
 
 
 # ── Candle pattern tools ───────────────────────────────────────────────────────
@@ -678,12 +696,17 @@ async def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dic
         exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX, EPA (Euronext Paris), AMS, BRU, LIS, MIL, LSE, SIX, BME, XETRA, FWB, TSX, TSXV, NSE, BSE (India), IDX (Indonesia)
     """
     try:
-        exchange = validate_exchange(exchange, "KUCOIN")
+        route = route_futures_request(symbol, exchange, "multi_timeframe_analysis")
+        if route and route.answer:
+            return route.answer
+        requested_exchange = exchange
+        exchange = validate_exchange(route.exchange if route else exchange, "KUCOIN")
         full_symbol = normalize_tradingview_symbol(symbol, exchange)
         # tradingview_ta backs this with a single threading.Semaphore-gated
         # request; pushing the whole call to a thread keeps the event loop
         # free while we wait on the upstream HTTP.
-        return await asyncio.to_thread(run_multi_timeframe_analysis, full_symbol, exchange)
+        result = await asyncio.to_thread(run_multi_timeframe_analysis, full_symbol, exchange)
+        return _with_route_note(result, route, requested_exchange)
     except Exception as e:
         return exception_to_envelope(e, context="multi_timeframe_analysis")
 
@@ -732,7 +755,10 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
         timeframe: Analysis timeframe (5m, 15m, 1h, 4h, 1D, 1W)
     """
     try:
-        exchange_clean = validate_exchange(exchange, "NASDAQ")
+        route = route_futures_request(symbol, exchange, "combined_analysis")
+        if route and route.answer:
+            return route.answer
+        exchange_clean = validate_exchange(route.exchange if route else exchange, "NASDAQ")
         timeframe_clean = validate_timeframe(timeframe, "1D")
     except Exception as e:
         return exception_to_envelope(e, context="combined_analysis")
@@ -766,7 +792,7 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
     confidence = "HIGH" if signals_agree else "MIXED"
     tech_signal = tech.get("market_sentiment", {}).get("buy_sell_signal", "N/A") if isinstance(tech, dict) else "N/A"
 
-    return {
+    result = {
         "symbol": symbol,
         "exchange": exchange_clean,
         "timeframe": timeframe_clean,
@@ -784,6 +810,7 @@ async def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: st
             ),
         },
     }
+    return _with_route_note(result, route, exchange)
 
 
 # ── Backtest tools ─────────────────────────────────────────────────────────────

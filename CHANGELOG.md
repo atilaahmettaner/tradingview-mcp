@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Futures and commodity requests to the TA tools were errors**: AI clients
+  pass the futures venue as the exchange (`coin_analysis("CL1!", "NYMEX")`,
+  `CME 6E1!`, `CBOT_MINI YM1!`, `COMEX GC1!`, `CBOE VIX`) or ask for oil, gas,
+  copper or an index as a CFD the scanners don't serve (`TVC:USOIL`,
+  `OANDA:BCOUSD`, `CAPITALCOM:US30`). `coin_analysis`,
+  `multi_timeframe_analysis` and `combined_analysis` answered
+  INVALID_EXCHANGE, SYMBOL_NOT_FOUND or NO_DATA (21 calls in 30 days on the
+  hosted server). They now:
+  - analyse gold, silver, platinum and palladium futures on the TVC spot
+    feed the symbol aliases already used (`GC1!` on COMEX → `TVC:GOLD`), and
+    say so in `resolution_note`;
+  - answer other contracts and those CFDs with the futures contract on the
+    same underlying and the `futures_category_snapshot` call that quotes it
+    (`use_instead`, `note`), not an error;
+  - point VIX on Cboe at `yahoo_price("^VIX")` and `market_snapshot`.
 - **`coin_analysis` took ~20s while TradingView was refusing requests, then
   called hour-old numbers "real-time"**: TradingView answers tradingview_ta's
   requests with empty bodies in bursts of minutes. Every call after the
