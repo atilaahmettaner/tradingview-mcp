@@ -19,6 +19,8 @@ Backtesting + live sentiment + Yahoo Finance + 39 technical-analysis tools — t
   &nbsp;
   <a href="https://tradingmcp.ai/connect?utm_source=github&utm_medium=readme&utm_content=add_to_cursor#cursor"><img src="https://img.shields.io/badge/Add_to-Cursor-1d1e1b?style=for-the-badge&logo=cursor&logoColor=white" alt="Add TradingMCP to Cursor" height="32"></a>
   <br>
+  <b>Starts at $9/month, 14-day money-back guarantee.</b>
+  <br>
   <sub>One click opens Claude's connector dialog with TradingMCP filled in; sign in with the email you subscribe with. Other apps: <a href="https://tradingmcp.ai/connect?utm_source=github&utm_medium=readme&utm_content=connect_other">tradingmcp.ai/connect</a></sub>
 </p>
 
