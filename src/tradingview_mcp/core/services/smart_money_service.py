@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 from tradingview_mcp.core.errors import ErrorCode, make_error
 from tradingview_mcp.core.services.backtest_service import _fetch_ohlcv
 from tradingview_mcp.core.services.indicators_calc import calc_ema, calc_rsi
+from tradingview_mcp.core.utils.validators import yahoo_metal_futures
 
 _DISCLAIMER = (
     "Price/volume-derived proxy for institutional activity — not actual "
@@ -44,9 +45,14 @@ def yahoo_symbol_for(symbol: str, exchange: str) -> str:
 
     EGX trades on Yahoo under the ``.CA`` (Cairo) suffix; BIST under ``.IS``.
     Crypto and US tickers pass through unchanged. Symbols that already carry
-    a Yahoo suffix or index prefix are left alone.
+    a Yahoo suffix or index prefix are left alone. Spot precious metals
+    (``XAUUSD`` on OANDA) become the front-month futures Yahoo has
+    (``GC=F``), on any exchange.
     """
     s = (symbol or "").strip().upper()
+    metal = yahoo_metal_futures(s)
+    if metal:
+        return metal[0]
     if not s or "." in s or s.startswith("^") or "-" in s or "=" in s:
         return s
     ex = (exchange or "").strip().lower()
@@ -329,7 +335,7 @@ def analyze_smart_money(
     else:
         consensus = "NEUTRAL"
 
-    return {
+    result = {
         "symbol": (symbol or "").upper(),
         "exchange": (exchange or "").upper(),
         "yahoo_symbol": ysym,
@@ -349,6 +355,10 @@ def analyze_smart_money(
         "methodology_note": _DISCLAIMER,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    metal = yahoo_metal_futures(symbol)
+    if metal:
+        result["note"] = metal[1]
+    return result
 
 
 def scan_egx_smart_money(

@@ -96,6 +96,7 @@ from tradingview_mcp.core.utils.validators import (
     validate_exchange,
     normalize_tradingview_symbol,
     normalize_yahoo_symbol,
+    yahoo_metal_futures,
 )
 from tradingview_mcp.core.errors import (
     ErrorCode,
@@ -641,7 +642,8 @@ def smart_money_analysis(
         symbol: Bare ticker — EGX: "COMI", "TMGH"; US: "AAPL"; crypto pairs
             work via Yahoo notation ("BTC-USD").
         exchange: EGX (maps to Yahoo .CA), BIST (.IS), TADAWUL (.SR); anything
-            else passes the symbol to Yahoo unchanged.
+            else passes the symbol to Yahoo unchanged, except spot metals
+            (XAUUSD on OANDA → gold futures GC=F; the result's `note` says so).
         period: 1mo | 3mo | 6mo | 1y | 2y (default 6mo)
         interval: 1d (default) or 1h
     """
@@ -909,10 +911,19 @@ def walk_forward_backtest_strategy(
 async def yahoo_price(symbol: str) -> dict:
     """Real-time price quote from Yahoo Finance for any stock, crypto, ETF or index.
 
+    Yahoo has no spot gold, silver, platinum or palladium (XAUUSD=X, XAGUSD,
+    OANDA:XPTUSD…): those are quoted from the front-month futures (GC=F,
+    SI=F, PL=F, PA=F), and the result's `note` says so.
+
     Args:
         symbol: Yahoo Finance symbol — e.g. AAPL, BTC-USD, SPY, ^GSPC, EURUSD=X, THYAO.IS
     """
-    return await get_price_async(normalize_yahoo_symbol(symbol))
+    result = await get_price_async(normalize_yahoo_symbol(symbol))
+    metal = yahoo_metal_futures(symbol)
+    if metal:
+        result["requested_symbol"] = (symbol or "").strip().upper()
+        result["note"] = metal[1]
+    return result
 
 
 @mcp.tool(annotations=ToolAnnotations(title="Global Market Snapshot", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
