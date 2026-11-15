@@ -5,6 +5,9 @@ network-free on purpose: each guard runs *before* `_fetch_ohlcv`, so passing a
 valid strategy/period/interval with an out-of-range numeric input returns a
 structured error without ever hitting Yahoo Finance.
 """
+from unittest.mock import patch
+
+from tradingview_mcp.core.services import backtest_service
 from tradingview_mcp.core.services.backtest_service import (
     _validate_numeric_inputs,
     run_backtest,
@@ -27,6 +30,13 @@ def test_zero_capital_rejected():
 def test_negative_capital_rejected():
     msg = _validate_numeric_inputs(-100.0, 0.1, 0.05)
     assert msg is not None and "initial_capital" in msg
+
+
+def test_non_finite_capital_rejected():
+    for capital in (float("nan"), float("inf"), float("-inf")):
+        msg = _validate_numeric_inputs(capital, 0.1, 0.05)
+        assert msg is not None and "initial_capital" in msg
+        assert "finite" in msg
 
 
 def test_negative_commission_rejected():
@@ -57,6 +67,14 @@ def test_run_backtest_rejects_bad_capital_offline():
     out = run_backtest("BTC-USD", "rsi", period="1y", interval="1d",
                        initial_capital=0.0)
     assert "error" in out and "initial_capital" in out["error"]
+
+
+def test_run_backtest_rejects_non_finite_capital_without_fetching():
+    with patch.object(backtest_service, "_fetch_ohlcv") as fetch:
+        out = run_backtest("SYNTHETIC", "rsi", period="1y", interval="1d",
+                           initial_capital=float("inf"))
+    assert "error" in out and "initial_capital" in out["error"]
+    fetch.assert_not_called()
 
 
 def test_walk_forward_rejects_negative_commission_offline():
