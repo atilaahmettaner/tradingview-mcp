@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **`yahoo_price` failed on spot gold and silver**: Yahoo Finance has no spot
+  precious metals. `XAUUSD=X` (spelled like `EURUSD=X`), `XAGUSD=X`, `XAU=X`
+  and plain `XAUUSD` answer 404, and `XAU-USD` is an unrelated token quoted
+  at 0. On the hosted server all 39 such `yahoo_price` calls since
+  2026-08-16 failed. Gold, silver, platinum and palladium against USD or USDT
+  (`XAUUSD`, `XAU-USD`, `XAU/USD`, `XAUUSDT`, with or without `=X`, and
+  `XAU=X`, also behind an `EXCHANGE:` prefix) are now quoted from Yahoo's
+  front-month futures, `GC=F`, `SI=F`, `PL=F` and `PA=F`. The result says so
+  in `note` and echoes `requested_symbol`. `smart_money_analysis` resolves
+  the same symbols the same way (`XAUUSD` on OANDA was a 404) and adds the
+  same `note`.
 - **Futures and commodity requests to the TA tools were errors**: AI clients
   pass the futures venue as the exchange (`coin_analysis("CL1!", "NYMEX")`,
   `CME 6E1!`, `CBOT_MINI YM1!`, `COMEX GC1!`, `CBOE VIX`) or ask for oil, gas,

@@ -82,6 +82,15 @@ class TestYahooSymbolMapping:
     def test_non_mapped_exchange_passes_through(self):
         assert sm.yahoo_symbol_for("AAPL", "NASDAQ") == "AAPL"
 
+    def test_spot_metals_map_to_futures_on_any_exchange(self):
+        # Yahoo has no spot metals: XAUUSD on OANDA was a 404 on the hosted
+        # server, and on the default EGX it became XAUUSD.CA.
+        assert sm.yahoo_symbol_for("XAUUSD", "OANDA") == "GC=F"
+        assert sm.yahoo_symbol_for("XAGUSD=X", "") == "SI=F"
+        assert sm.yahoo_symbol_for("OANDA:XPTUSD", "OANDA") == "PL=F"
+        assert sm.yahoo_symbol_for("xpdusd", "EGX") == "PA=F"
+        assert sm.yahoo_symbol_for("GC=F", "EGX") == "GC=F"
+
 
 class TestAnalyzeSmartMoney:
     def test_invalid_period_returns_envelope(self):
@@ -108,6 +117,15 @@ class TestAnalyzeSmartMoney:
         assert "methodology_note" in r  # honesty note must always ship
         for key in ("mcdx_style", "banker_fund_oscillator", "volume_flow_composite"):
             assert key in r
+        assert "note" not in r
+
+    def test_spot_metal_reads_the_futures_and_says_so(self):
+        with patch.object(sm, "_fetch_ohlcv", return_value=_accumulation_candles()) as fetch:
+            r = sm.analyze_smart_money("XAUUSD", "OANDA", period="1mo", interval="1h")
+        fetch.assert_called_once_with("GC=F", "1mo", "1h")
+        assert r["symbol"] == "XAUUSD"
+        assert r["yahoo_symbol"] == "GC=F"
+        assert "gold futures GC=F (front month), not spot" in r["note"]
 
 
 class TestEgxScanner:

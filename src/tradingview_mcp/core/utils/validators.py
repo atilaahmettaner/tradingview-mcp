@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
-from typing import Set
+import re
+from typing import Optional, Set, Tuple
 
 ALLOWED_TIMEFRAMES: Set[str] = {"5m", "15m", "1h", "4h", "1D", "1W", "1M"}
 _TIMEFRAME_ALIASES = {
@@ -255,10 +256,49 @@ def get_tv_exchange_prefix(exchange: str) -> str:
     return _EXCHANGE_TV_PREFIX.get(exchange.strip().lower(), exchange.upper())
 
 
+# Yahoo has no spot precious metals. XAUUSD=X (the EURUSD=X spelling),
+# XAGUSD=X, XPTUSD=X, XPDUSD=X, XAU=X and plain XAUUSD all 404, and XAU-USD
+# is an unrelated token quoted at 0. Yahoo's gold, silver, platinum and
+# palladium are the front-month futures, so those stand in, and the caller is
+# told it got futures. The pattern takes the forms users type, after any
+# EXCHANGE: prefix (OANDA:XAUUSD): XAUUSD, XAU-USD, XAU/USD, XAUUSDT, with or
+# without =X, and XAU=X. A bare XAU or XAG is left alone.
+_YAHOO_METAL_FUTURES: dict = {
+    "XAU": ("GC=F", "gold"),
+    "XAG": ("SI=F", "silver"),
+    "XPT": ("PL=F", "platinum"),
+    "XPD": ("PA=F", "palladium"),
+}
+_YAHOO_METAL_RE = re.compile(r"(XAU|XAG|XPT|XPD)(?:[-/]?USDT?(?:=X)?|=X)")
+
+
+def yahoo_metal_futures(symbol: str) -> Optional[Tuple[str, str]]:
+    """``(futures ticker, note)`` when *symbol* is a spot precious metal that
+    Yahoo Finance only has as futures (``XAUUSD=X`` → ``GC=F``), else None.
+
+    The note is for the tool result: the price is the front-month future's,
+    not spot's.
+    """
+    raw = (symbol or "").strip().upper()
+    bare = raw.split(":", 1)[1] if ":" in raw else raw
+    metal = _YAHOO_METAL_RE.fullmatch(bare)
+    if not metal:
+        return None
+    ticker, name = _YAHOO_METAL_FUTURES[metal.group(1)]
+    return ticker, (
+        f"Yahoo Finance has no spot {name} price for {bare}, so this is "
+        f"{name} futures {ticker} (front month), not spot. Futures trade "
+        "close to, but not exactly at, the spot price."
+    )
+
+
 def normalize_yahoo_symbol(symbol: str) -> str:
     """Return a provider-specific Yahoo Finance symbol for common user aliases."""
     raw = (symbol or "").strip().upper()
-    return _YAHOO_SYMBOL_ALIASES.get(raw, raw)
+    if raw in _YAHOO_SYMBOL_ALIASES:
+        return _YAHOO_SYMBOL_ALIASES[raw]
+    metal = yahoo_metal_futures(raw)
+    return metal[0] if metal else raw
 
 
 def normalize_tradingview_symbol(symbol: str, exchange: str) -> str:
